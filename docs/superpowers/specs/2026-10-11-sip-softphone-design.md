@@ -1,6 +1,8 @@
 # Softphone SIP no navegador — design
 
-Data: 2026-10-11 · Status: revisão 2, aguardando aprovação
+Data: 2026-10-11 · Status: revisão 3 — arquitetura aprovada; fase 1 condicionada
+ao relatório da fase 0. Compatibilidade de migrations, permissões e integração
+com o código existente ainda precisa ser verificada no repositório (no plano).
 
 ## Objetivo
 
@@ -75,12 +77,22 @@ Colunas novas:
 - `sip_call_id` — o identificador **SIP** da chamada. Indexado, **não único**:
   encaminhamento, transferência ou vários ramais podem gerar mais de uma linha
   com o mesmo Call-ID, e o provedor pode alterá-lo entre pernas.
-- `client_call_ref` — UUID gerado pelo navegador ao iniciar/atender. É a chave
-  de **idempotência**, com índice único `(organization_id, agent_id,
-  client_call_ref)`. Repetir a criação devolve o registro do **mesmo agente**,
-  nunca o de outro.
+- `client_call_ref` — UUID gerado pelo navegador. É a chave de **idempotência**,
+  com índice único `(organization_id, agent_id, client_call_ref)`. Repetir a
+  criação devolve o registro do **mesmo agente**, nunca o de outro. Momento da
+  geração: **saída** — na criação da tentativa; **entrada** — assim que a sessão
+  recebida é detectada, **antes** de atender, recusar ou rejeitar por ocupação,
+  para que chamadas recusadas e perdidas também tenham referência. Retries
+  reutilizam a mesma referência.
 - `outcome_reason` — motivo estruturado (por exemplo `client_timeout`), usado
   pela interface e pelos indicadores sem interpretar `error_message`.
+- `duration_known` (boolean, padrão `true`) — distingue **duração zero
+  conhecida** (cancelamento legítimo antes de atender) de **duração
+  desconhecida** (`completed` sem `answered`, ou recuperação parcial). Não se usa
+  `answered_at = null` para isso. A interface mostra "—" quando
+  `duration_known = false`.
+- `corrections` (jsonb) — registro das correções por episódio de timeout
+  (quando, evento recebido, estado anterior e posterior).
 
 Regra por canal: `whatsapp_account` é obrigatório para `whatsapp` e vazio para
 `sip`. O plano inclui auditar consultas, serializers e filtros que assumem a
@@ -94,9 +106,10 @@ perder ou manipular eventos.
 | Operação | Endpoint | Permissão |
 |---|---|---|
 | Ler a própria configuração | `GET /api/sip/config` | `sip_calls:read` |
-| Registrar chamada recebida / atendida / recusada / perdida | `POST` e `PATCH /api/sip/calls` | `sip_calls:read` |
-| Registrar chamada de saída (discar para externo) | `POST` e `PATCH /api/sip/calls` com `direction=outgoing` | `sip_calls:write` |
-| Heartbeat | `POST /api/sip/calls/{id}/heartbeat` | a mesma da direção da chamada |
+| Criar registro de chamada recebida | `POST /api/sip/calls` com `direction=incoming` | `sip_calls:read` |
+| Criar registro de chamada de saída (discar para externo) | `POST /api/sip/calls` com `direction=outgoing` | `sip_calls:write` |
+| Atualizar desfecho (atendida, recusada, perdida, encerrada) | `PATCH /api/sip/calls/{id}` | pela direção **persistida** do registro |
+| Heartbeat | `POST /api/sip/calls/{id}/heartbeat` | pela direção **persistida** do registro |
 | Gerir ramais | `/api/sip/extensions` | `sip_extensions` |
 
 A permissão de discar externamente não impede o registro de uma chamada
@@ -110,19 +123,25 @@ Estado inicial persistido: saída `initiating`, entrada `ringing`.
 | De | Evento | Para | Observação |
 |---|---|---|---|
 | `initiating` | provedor sinaliza toque | `ringing` | |
+| `initiating` | atendida sem evento de toque | `answered` | grava `answered_at` |
 | `ringing` | atendida | `answered` | grava `answered_at` |
 | `answered` | encerrada | `completed` | `duration = ended_at − answered_at` |
-| `initiating`/`ringing` | agente cancela (saída) | `completed` | `answered_at` nulo, `duration = 0`, `disconnected_by=agent` (igual ao WhatsApp) |
+| `initiating`/`ringing` | agente cancela (saída) | `completed` | `answered_at` nulo, `duration = 0`, `duration_known = true`, `disconnected_by=agent` (igual ao WhatsApp) |
 | `initiating`/`ringing` | destino recusa | `rejected` | |
 | `ringing` | agente recusa (entrada) | `rejected` | |
 | `ringing` | ninguém atende / originador cancela (entrada) | `missed` | |
 | qualquer não terminal | erro de rede/SIP | `failed` | |
-| `initiating`/`ringing` | `completed` recebido sem `answered` | `completed` | evento intermediário perdido: aceita; `answered_at` nulo e `duration = 0` ("duração desconhecida" na interface) |
-| `failed` com `client_timeout` | evento tardio com desfecho real | `answered`/`completed`/etc. | **correção restrita**, uma única vez; registra no histórico que houve correção |
+| `initiating`/`ringing` | `completed` recebido sem `answered` | `completed` | evento intermediário perdido: aceita; `answered_at` nulo, `duration = 0`, **`duration_known = false`** |
+| `failed` com `client_timeout` | evento tardio com desfecho real | `answered`/`completed`/etc. | **correção por episódio de timeout** (ver "Recuperação após `client_timeout`") |
 
 Estados terminais: `completed`, `rejected`, `missed` e `failed` (exceto
-`failed` com `outcome_reason=client_timeout`, corrigível uma vez). Evento
-tardio sobre outro terminal é descartado e logado.
+`failed` com `outcome_reason=client_timeout`, corrigível). Evento tardio sobre
+outro terminal é descartado e logado.
+
+**Autorização pela direção persistida:** no `PATCH` e no heartbeat, a permissão
+é determinada pela `direction` **já gravada** no registro, nunca pela recebida
+no request. A direção é **imutável** após a criação (o `PATCH` a ignora e um
+valor divergente responde 422).
 
 **Concorrência:** cada atualização roda em transação com `SELECT … FOR UPDATE`
 na linha e aplica a tabela acima sobre o estado lido; requests concorrentes são
@@ -139,6 +158,25 @@ então esse é um desfecho **desconhecido**, não falha confirmada:
 - a interface mostra "desfecho desconhecido", sem depender de `error_message`;
 - indicadores e relatórios **não** contam `client_timeout` como falha;
 - um evento tardio corrige a linha conforme a tabela acima.
+
+**Reaper:** usa a mesma proteção transacional das atualizações. Seleciona
+candidatas, bloqueia a linha (`FOR UPDATE`) e **revalida `last_seen_at` depois
+do lock** antes de marcar; um heartbeat que chegou no meio impede a marcação.
+
+### Recuperação após `client_timeout`
+
+A correção vale **por episódio de timeout**, não "uma única vez" na vida da
+chamada:
+
+- Ao receber evento tardio ou heartbeat de uma chamada em `client_timeout`, a
+  linha volta ao estado real informado (`answered`, `completed`, ...).
+- A recuperação **limpa os campos de encerramento provisório** (`ended_at`,
+  `outcome_reason`, `error_message`, `disconnected_by=system`), **atualiza
+  `last_seen_at`** e permite o encerramento normal posterior.
+- Se a chamada voltar a ficar órfã depois, um **novo** episódio de timeout
+  começa e pode ser corrigido de novo.
+- Cada episódio e cada correção ficam em `corrections`, mantendo a trilha das
+  alterações.
 
 ## Frontend (fase 1)
 
@@ -158,8 +196,12 @@ então esse é um desfecho **desconhecido**, não falha confirmada:
    (SIP e WhatsApp), mantido durante **toda** a chamada. Usa
    `navigator.locks` mais um canal (`BroadcastChannel`) para estado visível.
    Tem **proprietário/token**: um evento atrasado de uma chamada não libera a
-   reserva de outra. A reserva acontece **antes de qualquer operação
-   assíncrona**.
+   reserva de outra. A aquisição é assíncrona (`navigator.locks.request`), por
+   isso: **nenhuma operação de chamada — discagem, atendimento ou acesso à
+   mídia — começa antes da confirmação de aquisição do lock.** A aquisição usa
+   `ifAvailable: true` (sem espera), para que um clique bloqueado não fique
+   enfileirado e disque depois. O callback do lock permanece pendente durante
+   toda a chamada e só é resolvido ao encerrá-la.
 
 Regras:
 
@@ -191,9 +233,19 @@ Regras:
 - Isolamento entre organizações e entre agentes (ler/atualizar log alheio → 404).
 - Idempotência: criar 2x com o mesmo `client_call_ref` devolve o mesmo registro;
   nunca o de outro agente; duas pernas com o mesmo `sip_call_id` não colidem.
-- Máquina de estados: cada linha da tabela, eventos fora de ordem, duplicados,
-  concorrentes (dois requests diferentes na mesma chamada), correção tardia de
-  `client_timeout`.
+- Máquina de estados: cada linha da tabela (incluindo `initiating → answered`),
+  eventos fora de ordem, duplicados, concorrentes (dois requests diferentes na
+  mesma chamada), `duration_known` em cancelamento legítimo vs `completed` sem
+  `answered`.
+- Recuperação de `client_timeout`: limpa campos provisórios, atualiza
+  `last_seen_at`, permite encerramento normal, segundo episódio de timeout
+  corrigível, `corrections` registra cada um; heartbeat concorrente ao reaper
+  impede a marcação (revalidação após o lock).
+- Autorização pela direção persistida: `PATCH`/heartbeat com `direction`
+  divergente no request não escala permissão; direção imutável.
+- `client_call_ref` gerado antes de atender/recusar: chamada recusada por
+  ocupação já tem referência, e retries não duplicam.
+- Lock: clique com lock ocupado não enfileira nem disca depois (`ifAvailable`).
 - Chamadas entre dois atendentes da mesma organização.
 - Chamada SIP em uma aba e WhatsApp em outra (deve bloquear); token impede que
   evento atrasado libere reserva alheia.
