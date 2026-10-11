@@ -1,6 +1,6 @@
 # Softphone SIP no navegador — design
 
-Data: 2026-10-11 · Status: aguardando revisão
+Data: 2026-10-11 · Status: revisão 2, aguardando aprovação
 
 ## Objetivo
 
@@ -17,7 +17,7 @@ atendente tem seu próprio ramal. As chamadas aparecem no mesmo histórico
 | Provedor | Brasileiro, com SIP sobre WSS/WebRTC. **Nome ainda não definido (item em aberto 1).** |
 | Credenciais | Um ramal por atendente. |
 | Escopo geral | Ligar, receber, histórico, espera, transferência, DTMF, gravação. |
-| Entrega | Fases 0 a 3, cada uma com spec/plano/PR próprios a partir da fase 1. |
+| Entrega | Fases 0 a 3, cada uma com plano e PR próprios a partir da fase 1. |
 
 ## Fora de escopo
 
@@ -25,20 +25,27 @@ atendente tem seu próprio ramal. As chamadas aparecem no mesmo histórico
   gravação/CDR por API ou se a senha SIP no navegador for inaceitável.
 - Receber chamadas com a aba fechada.
 - Reconciliação com CDR do provedor para faturamento/auditoria.
-- Alterar o fluxo das chamadas de WhatsApp.
+- Exclusividade de chamada **entre navegadores ou dispositivos diferentes**
+  (limite declarado: os locks valem dentro de um navegador).
 
 ## Fases
 
 0. **Spike (descartável).** Página de teste com JsSIP contra um ramal de teste,
-   rodada pelo dono do ramal. Valida: registro WSS, ligar e receber, codecs,
-   DTMF, REFER, ICE/TURN, e como obter gravação e CDR do provedor. Saída: um
-   relatório, não código do produto.
+   rodada pelo dono do ramal. Cada capacidade é concluída como **validada**,
+   **não suportada** ou **inconclusiva**, com a evidência:
+   registro WSS; ligar e receber; codecs; DTMF; transferência cega e assistida
+   (REFER sozinho não prova ambas); espera; ICE/TURN; suspensão de aba e
+   reconexão; qual identificador correlaciona **CDR e gravação** com a chamada
+   (o Call-ID SIP pode mudar entre pernas); como o Whatc **localiza e acessa** a
+   gravação certa, não só "o provedor grava". Saída: um relatório, não código do
+   produto.
 1. **Núcleo.** Ramais, ligar, receber com toque, mudo, desligar, histórico,
-   exclusão mútua, várias abas.
-2. **Controles.** Espera (re-INVITE), transferência (REFER) e DTMF.
-3. **Gravação.** Gravação feita pelo provedor, correlacionada por `sip_call_id`.
-   Só entra depois de a fase 0 confirmar a capacidade. Gravação local no
-   navegador **não** é solução (aba fechada perde o áudio).
+   exclusão mútua, várias abas. Condicionada ao relatório da fase 0.
+2. **Controles.** Espera (re-INVITE), DTMF e **transferência cega**. A
+   transferência assistida entra só se a fase 0 a validar.
+3. **Gravação.** Gravação feita pelo provedor, correlacionada pelo identificador
+   que a fase 0 confirmar. Gravação local no navegador **não** é solução (aba
+   fechada perde o áudio).
 
 ## Backend (fase 1)
 
@@ -55,90 +62,163 @@ Tabela `sip_extensions`: `organization_id`, `user_id` (único por organização)
   senha, porque o navegador precisa dela. Responde `Cache-Control: no-store`, só
   por HTTPS. A senha não é logada, não vai a telemetria e não é gravada em
   storage persistente do frontend.
+- **Limite declarado:** como a credencial está no navegador, bloquear o botão
+  de discagem não impede chamadas externas feitas por outro cliente SIP com a
+  mesma credencial. Restrição efetiva de destinos (países, prefixos, limite de
+  gasto) deve ser configurada **no provedor/ramal**.
 
 ### Histórico (`call_logs`)
 
-- Novas colunas: `channel` (`whatsapp` padrão, `sip`) e `sip_call_id`.
-- Regra por canal: `whatsapp_account` é obrigatório para `whatsapp` e vazio
-  para `sip`. O plano inclui auditar consultas, serializers e filtros que
-  assumem a conta preenchida.
-- Índice único `(organization_id, sip_call_id)` para idempotência.
-- `POST /api/sip/calls` cria o log (direção, número, `sip_call_id`) e vincula
-  `contact_id` pelo telefone com a normalização existente. Repetir a chamada
-  devolve o mesmo registro.
-- `PATCH /api/sip/calls/{id}` aceita `answered`, `completed`, `rejected`,
-  `missed`, `failed`. Mesmo estado repetido é no-op. Transições inválidas
-  (por exemplo, reabrir `completed`) são recusadas.
-- Toda autorização confere **organização e agente**. Registro de outro agente
-  ou organização responde 404.
-- Horários carimbados pelo servidor. `duration` = `answered_at → ended_at`
-  (conversa). Tempo de toque = `started_at → answered_at`.
-- O histórico SIP é **operacional, não auditável**: o navegador pode atrasar,
-  perder ou manipular eventos.
+Colunas novas:
+
+- `channel` (`whatsapp` padrão, `sip`).
+- `sip_call_id` — o identificador **SIP** da chamada. Indexado, **não único**:
+  encaminhamento, transferência ou vários ramais podem gerar mais de uma linha
+  com o mesmo Call-ID, e o provedor pode alterá-lo entre pernas.
+- `client_call_ref` — UUID gerado pelo navegador ao iniciar/atender. É a chave
+  de **idempotência**, com índice único `(organization_id, agent_id,
+  client_call_ref)`. Repetir a criação devolve o registro do **mesmo agente**,
+  nunca o de outro.
+- `outcome_reason` — motivo estruturado (por exemplo `client_timeout`), usado
+  pela interface e pelos indicadores sem interpretar `error_message`.
+
+Regra por canal: `whatsapp_account` é obrigatório para `whatsapp` e vazio para
+`sip`. O plano inclui auditar consultas, serializers e filtros que assumem a
+conta preenchida.
+
+O histórico SIP é **operacional, não auditável**: o navegador pode atrasar,
+perder ou manipular eventos.
+
+### Endpoints e permissões (matriz por operação)
+
+| Operação | Endpoint | Permissão |
+|---|---|---|
+| Ler a própria configuração | `GET /api/sip/config` | `sip_calls:read` |
+| Registrar chamada recebida / atendida / recusada / perdida | `POST` e `PATCH /api/sip/calls` | `sip_calls:read` |
+| Registrar chamada de saída (discar para externo) | `POST` e `PATCH /api/sip/calls` com `direction=outgoing` | `sip_calls:write` |
+| Heartbeat | `POST /api/sip/calls/{id}/heartbeat` | a mesma da direção da chamada |
+| Gerir ramais | `/api/sip/extensions` | `sip_extensions` |
+
+A permissão de discar externamente não impede o registro de uma chamada
+recebida. Toda autorização confere **organização e agente**; registro de outro
+agente ou organização responde 404.
+
+### Máquina de estados
+
+Estado inicial persistido: saída `initiating`, entrada `ringing`.
+
+| De | Evento | Para | Observação |
+|---|---|---|---|
+| `initiating` | provedor sinaliza toque | `ringing` | |
+| `ringing` | atendida | `answered` | grava `answered_at` |
+| `answered` | encerrada | `completed` | `duration = ended_at − answered_at` |
+| `initiating`/`ringing` | agente cancela (saída) | `completed` | `answered_at` nulo, `duration = 0`, `disconnected_by=agent` (igual ao WhatsApp) |
+| `initiating`/`ringing` | destino recusa | `rejected` | |
+| `ringing` | agente recusa (entrada) | `rejected` | |
+| `ringing` | ninguém atende / originador cancela (entrada) | `missed` | |
+| qualquer não terminal | erro de rede/SIP | `failed` | |
+| `initiating`/`ringing` | `completed` recebido sem `answered` | `completed` | evento intermediário perdido: aceita; `answered_at` nulo e `duration = 0` ("duração desconhecida" na interface) |
+| `failed` com `client_timeout` | evento tardio com desfecho real | `answered`/`completed`/etc. | **correção restrita**, uma única vez; registra no histórico que houve correção |
+
+Estados terminais: `completed`, `rejected`, `missed` e `failed` (exceto
+`failed` com `outcome_reason=client_timeout`, corrigível uma vez). Evento
+tardio sobre outro terminal é descartado e logado.
+
+**Concorrência:** cada atualização roda em transação com `SELECT … FOR UPDATE`
+na linha e aplica a tabela acima sobre o estado lido; requests concorrentes são
+serializados e o perdedor reavalia. "Mesmo estado" é no-op.
 
 ### Chamadas órfãs
 
-O navegador envia heartbeat a cada ~30s (`last_seen_at`), com tolerância para
-aba suspensa e reconexão. Sem sinal por um prazo configurável, um job marca a
-chamada `failed` com `error_message` "contato com o cliente perdido, desfecho
-não confirmado" e `disconnected_by=system`. Não é apresentado como falha
-confirmada pelo provedor.
+O navegador envia heartbeat a cada 30s (`last_seen_at`). Sem sinal por 3 min
+(configuração inicial, validada nos testes de suspensão e reconexão), um job
+marca a chamada `failed` com `outcome_reason=client_timeout` e
+`disconnected_by=system`. A mídia pode continuar com timers limitados na aba,
+então esse é um desfecho **desconhecido**, não falha confirmada:
 
-### Permissões
-
-Separadas e explícitas:
-
-- `sip_extensions` — gestão dos ramais (admin).
-- `sip_calls:read` — usar o softphone e receber chamadas.
-- `sip_calls:write` — discar para números externos.
+- a interface mostra "desfecho desconhecido", sem depender de `error_message`;
+- indicadores e relatórios **não** contam `client_timeout` como falha;
+- um evento tardio corrige a linha conforme a tabela acima.
 
 ## Frontend (fase 1)
 
 - `services/sip.ts`: encapsula o JsSIP (registro, ligar, atender, mudo,
   desligar) e expõe eventos simples. Nenhum detalhe SIP vaza para componentes.
-- `stores/sip.ts`: estado do softphone. Separado do `calling.ts`.
+- `stores/sip.ts`: estado do softphone, separado do `calling.ts`.
 - **Estados separados.** Registro: `conectando`, `registrado`, `recusado`,
   `reconectando`, `offline`. Chamada: `ociosa`, `chamando`, `tocando`,
   `em andamento`, `encerrando`.
-- **Exclusão mútua.** Módulo `callLock` com `acquire(kind)` / `release()`
-  síncronos, compartilhado por `calling.ts` e `sip.ts`. Dentro de uma aba o JS é
-  single-thread, então o check-and-set é atômico.
-- **Várias abas.** Só a aba que obtém `navigator.locks` (`sip-register-<userId>`)
-  registra o ramal e trata chamadas. As demais mostram "ramal ativo em outra aba".
+
+### Exclusão mútua (dois locks)
+
+1. **Registro SIP** — `navigator.locks` com `sip-register-<userId>`: só a aba
+   que o detém registra o ramal e recebe chamadas. As demais mostram "ramal
+   ativo em outra aba".
+2. **Chamada do atendente** — lock compartilhado **entre abas e entre canais**
+   (SIP e WhatsApp), mantido durante **toda** a chamada. Usa
+   `navigator.locks` mais um canal (`BroadcastChannel`) para estado visível.
+   Tem **proprietário/token**: um evento atrasado de uma chamada não libera a
+   reserva de outra. A reserva acontece **antes de qualquer operação
+   assíncrona**.
+
+Regras:
+
+- Chamada recebida enquanto o atendente está ocupado: SIP é recusado com 486
+  (busy) e registrado como `missed`; transferência de WhatsApp segue o fluxo de
+  fila existente, sem tocar no atendente.
+- Logout e troca de organização liberam os dois locks e encerram o registro.
+- `navigator.locks` ausente (navegador antigo): o softphone fica **desativado**
+  com aviso, em vez de rodar sem exclusão.
+- Limite declarado: sem exclusividade entre navegadores ou dispositivos
+  diferentes do mesmo atendente.
+
+### Demais pontos
+
 - **Toque.** Reaproveita `startRingTone` / `stopRingTone` de `calling.ts`
   (passam a ser exportados).
-- **ICE.** Reaproveita `GET /api/calls/ice-servers`, validando na fase 0 que as
+- **ICE.** Reaproveita `GET /api/calls/ice-servers`; a fase 0 valida que as
   credenciais TURN servem ao provedor.
 - **Erros visíveis:** ramal não registrado, registro recusado, sem microfone,
-  autoplay bloqueado, falha de ICE. Hoje falha de ICE some em silêncio nas
-  chamadas de WhatsApp; aqui não pode.
+  autoplay bloqueado, falha de ICE.
 - **UI:** discador compacto e banner de chamada recebida (atender/recusar). No
   contato, o botão de ligar oferece WhatsApp ou telefone.
+- **WhatsApp:** o comportamento é preservado, **exceto pela exclusão mútua
+  deliberada**: com uma chamada SIP em curso, iniciar ou atender WhatsApp passa
+  a ser bloqueado, e vice-versa.
 
 ## Testes obrigatórios
 
 - Isolamento entre organizações e entre agentes (ler/atualizar log alheio → 404).
-- Eventos duplicados e fora de ordem (criar 2x; `completed` antes de `answered`).
-- Chamadas simultâneas: SIP + WhatsApp no mesmo atendente; dois cliques rápidos.
-- Duas abas: só uma registra; a segunda assume ao fechar a primeira.
-- Perda de rede: reconexão do registro; chamada em curso sem heartbeat.
-- Fechamento da aba: job marca `failed` não confirmado.
-- Senha nunca na resposta administrativa nem em log.
+- Idempotência: criar 2x com o mesmo `client_call_ref` devolve o mesmo registro;
+  nunca o de outro agente; duas pernas com o mesmo `sip_call_id` não colidem.
+- Máquina de estados: cada linha da tabela, eventos fora de ordem, duplicados,
+  concorrentes (dois requests diferentes na mesma chamada), correção tardia de
+  `client_timeout`.
+- Chamadas entre dois atendentes da mesma organização.
+- Chamada SIP em uma aba e WhatsApp em outra (deve bloquear); token impede que
+  evento atrasado libere reserva alheia.
+- Chamada recebida com atendente ocupado (486 e `missed`).
+- Duas abas: só uma registra; a segunda assume ao fechar a primeira; logout e
+  troca de organização liberam os locks.
+- Perda de rede (reconexão do registro; chamada sem heartbeat) e suspensão da aba.
+- Permissões por operação: receber sem `write`; discar exige `write`.
+- Senha nunca na resposta administrativa nem em log; `no-store` presente.
 - Regressão das chamadas de WhatsApp: listagem de `call_logs`, saída e entrada.
 
 ## Riscos
 
 - **Senha SIP no navegador** é inevitável no modelo A. Mitigação: ramal por
-  atendente, senha própria do ramal, rotacionável pelo admin.
+  atendente, rotação pelo admin e restrição de destinos no provedor.
 - **Dependência do provedor** para gravação e CDR. Mitigação: fase 0 antes de
-  qualquer código de produto; fase 3 só com capacidade confirmada.
+  qualquer código de produto; fase 3 só com correlação comprovada.
 - **Histórico depende do navegador.** Aceito na fase 1, declarado como
   operacional.
+- **Timers de aba suspensa** podem gerar desfecho desconhecido. Mitigação:
+  `client_timeout` corrigível e fora dos indicadores.
 
 ## Itens em aberto
 
-1. Nome do provedor brasileiro (define WSS, codecs, gravação e CDR).
-2. Prazo do reaper de chamadas órfãs e intervalo do heartbeat (proposta: 30s e
-   3 min sem sinal).
-3. Status próprio para chamada órfã em vez de `failed` com mensagem (proposta
-   atual: manter `failed`, sem novo status).
+1. Nome do provedor brasileiro. **Bloqueia a execução do spike** (fase 0).
+2. Valores finais de heartbeat/reaper (iniciais: 30s e 3 min), a validar nos
+   testes de suspensão e reconexão.
+3. Transferência assistida na fase 2: depende do relatório da fase 0.
