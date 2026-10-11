@@ -48,10 +48,11 @@ const error = computed(() => false)
 
 const columns = computed<Column<Unit>[]>(() => [
   { key: 'name', label: t('units.columnName') },
-  { key: 'cnpj', label: t('units.columnCnpj') },
-  { key: 'type', label: t('units.columnType') },
-  { key: 'x2', label: t('units.columnX2') },
-  { key: 'active', label: t('units.columnActive'), align: 'center' },
+  // whitespace-nowrap: short fields (CNPJ, type, store, status) must not wrap; only the name does.
+  { key: 'cnpj', label: t('units.columnCnpj'), width: 'whitespace-nowrap' },
+  { key: 'type', label: t('units.columnType'), width: 'whitespace-nowrap' },
+  { key: 'x2', label: t('units.columnX2'), width: 'whitespace-nowrap' },
+  { key: 'active', label: t('units.columnActive'), width: 'whitespace-nowrap', align: 'center' },
   { key: 'actions', label: t('common.actions'), align: 'right' },
 ])
 
@@ -149,7 +150,7 @@ async function confirmDelete() {
 
     <ScrollArea v-else orientation="vertical" class="flex-1">
       <div class="p-6">
-        <div class="max-w-4xl mx-auto">
+        <div class="max-w-6xl mx-auto">
           <Card>
             <CardHeader>
               <CardTitle>{{ $t('units.cardTitle') }}</CardTitle>
@@ -169,13 +170,13 @@ async function confirmDelete() {
                   <span class="font-medium">{{ unit.name }}</span>
                 </template>
                 <template #cell-cnpj="{ item: unit }">
-                  <span class="text-muted-foreground tabular-nums">{{ unit.cnpj ? formatCNPJ(unit.cnpj) : '—' }}</span>
+                  <span class="text-muted-foreground tabular-nums whitespace-nowrap">{{ unit.cnpj ? formatCNPJ(unit.cnpj) : '—' }}</span>
                 </template>
                 <template #cell-type="{ item: unit }">
                   <span class="text-muted-foreground">{{ unit.type || '—' }}</span>
                 </template>
                 <template #cell-x2="{ item: unit }">
-                  <span v-if="unit.xprocess_cod_empresa" class="tabular-nums" data-testid="unit-x2-store">X2 {{ unit.xprocess_cod_empresa }}</span>
+                  <span v-if="unit.xprocess_cod_empresa" class="tabular-nums whitespace-nowrap" data-testid="unit-x2-store">X2 {{ unit.xprocess_cod_empresa }}</span>
                   <span v-else class="text-muted-foreground">—</span>
                 </template>
                 <template #cell-active="{ item: unit }">
