@@ -275,6 +275,27 @@ func (m *Manager) waitForWASDPAnswer(session *CallSession, waPC *webrtc.PeerConn
 		}
 	case <-time.After(30 * time.Second):
 		m.log.Error("Timed out waiting for WA SDP answer", "call_id", session.ID)
+		// Without this the call log stays "initiating" forever and the agent's UI never clears.
+		now := time.Now()
+		res := m.db.Model(&models.CallLog{}).
+			Where("id = ? AND status IN ?", session.CallLogID,
+				[]models.CallStatus{models.CallStatusInitiating, models.CallStatusRinging}).
+			Updates(map[string]any{
+				"status":          models.CallStatusFailed,
+				"error_message":   "timed out waiting for the WhatsApp SDP answer",
+				"ended_at":        now,
+				"disconnected_by": models.DisconnectedBySystem,
+			})
+		if res.RowsAffected > 0 {
+			m.broadcastEvent(session.OrganizationID, websocket.TypeOutgoingCallEnded, map[string]any{
+				"call_log_id":     session.CallLogID.String(),
+				"call_id":         session.ID,
+				"contact_id":      session.ContactID.String(),
+				"contact_phone":   session.TargetPhone,
+				"ended_at":        now.Format(time.RFC3339),
+				"disconnected_by": "system",
+			})
+		}
 		m.cleanupSession(session.ID)
 	}
 }
