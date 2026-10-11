@@ -329,6 +329,8 @@ func (m *Manager) HandleOutgoingCallWebhook(callID, event, sdpAnswer string) {
 			"call_id":       callID,
 			"contact_id":    session.ContactID.String(),
 			"contact_phone": session.TargetPhone,
+			// Without a configured file the browser plays a default ringback tone.
+			"custom_ringback": ringbackFile != "",
 		})
 
 	case "accepted", "in_call", "connect":

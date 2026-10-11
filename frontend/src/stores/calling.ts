@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { callLogsService, ivrFlowsService, callTransfersService, outgoingCallsService, type CallLog, type IVRFlow, type CallTransfer } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
@@ -48,6 +48,36 @@ export const useCallingStore = defineStore('calling', () => {
       audioContext = new AudioCtx()
     }
     return audioContext
+  }
+
+  // Default ringback (425 Hz, 1s on / 4s off) played locally when the org has no ringback file.
+  let ringTone: { osc: OscillatorNode; gain: GainNode; timer: number } | null = null
+
+  function stopRingTone() {
+    if (!ringTone) return
+    clearInterval(ringTone.timer)
+    try { ringTone.osc.stop() } catch {}
+    ringTone = null
+  }
+
+  function startRingTone() {
+    if (ringTone) return
+    try {
+      const ctx = getAudioContext()
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.frequency.value = 425
+      gain.gain.value = 0
+      osc.connect(gain).connect(ctx.destination)
+      osc.start()
+      const beat = (n: number) => { gain.gain.value = n % 5 === 0 ? 0.15 : 0 }
+      let n = 0
+      beat(n++)
+      ringTone = { osc, gain, timer: window.setInterval(() => beat(n++), 1000) }
+    } catch (e) {
+      console.warn('[Calling] ringback tone error:', e)
+    }
   }
 
   // Prime AudioContext synchronously during user gesture (click to answer or call)
@@ -508,6 +538,7 @@ export const useCallingStore = defineStore('calling', () => {
   }
 
   function cleanup() {
+    stopRingTone()
     if (durationTimer) {
       clearInterval(durationTimer)
       durationTimer = null
@@ -596,10 +627,12 @@ export const useCallingStore = defineStore('calling', () => {
       case 'outgoing_call_ringing':
         if (outgoingCallLogId.value === payload.call_log_id || outgoingCallLogId.value === payload.call_id) {
           outgoingCallStatus.value = 'ringing'
+          if (!payload.custom_ringback) startRingTone()
         }
         break
       case 'outgoing_call_answered':
         if (outgoingCallLogId.value === payload.call_log_id || outgoingCallLogId.value === payload.call_id) {
+          stopRingTone()
           outgoingCallStatus.value = 'answered'
         }
         break
@@ -637,6 +670,15 @@ export const useCallingStore = defineStore('calling', () => {
         break
     }
   }
+
+  // Ring while an incoming call/transfer waits and this agent isn't already busy.
+  watch(
+    () => waitingTransfers.value.length > 0 && !isOnCall.value && !isConnecting.value && !outgoingCallLogId.value,
+    (shouldRing) => {
+      if (shouldRing) startRingTone()
+      else if (outgoingCallStatus.value !== 'ringing') stopRingTone()
+    },
+  )
 
   return {
     // Call logs
