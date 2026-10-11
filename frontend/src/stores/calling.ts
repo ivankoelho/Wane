@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { callLogsService, ivrFlowsService, callTransfersService, outgoingCallsService, type CallLog, type IVRFlow, type CallTransfer } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
@@ -64,6 +64,7 @@ export const useCallingStore = defineStore('calling', () => {
     if (ringTone) return
     try {
       const ctx = getAudioContext()
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.frequency.value = 425
@@ -669,6 +670,15 @@ export const useCallingStore = defineStore('calling', () => {
         break
     }
   }
+
+  // Ring while an incoming call/transfer waits and this agent isn't already busy.
+  watch(
+    () => waitingTransfers.value.length > 0 && !isOnCall.value && !isConnecting.value && !outgoingCallLogId.value,
+    (shouldRing) => {
+      if (shouldRing) startRingTone()
+      else if (outgoingCallStatus.value !== 'ringing') stopRingTone()
+    },
+  )
 
   return {
     // Call logs
