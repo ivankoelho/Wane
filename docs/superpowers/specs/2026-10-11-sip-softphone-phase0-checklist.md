@@ -58,9 +58,12 @@ Para cada teste: **Procedimento → Esperado → Evidência → Conclusão**.
 ### T2. Chamada de saída para número externo
 
 - **Procedimento:** discar para o número de teste A; atender; ficar 30s; desligar.
-- **Esperado:** sinalização de toque, atendimento, encerramento; estados na ordem
-  `initiating → ringing → answered → completed`.
-- **Evidência:** sequência de eventos com horários; Call-ID da perna.
+- **Esperado:** atendimento e encerramento com estados na ordem
+  `initiating → ringing → answered → completed` **ou**
+  `initiating → answered → completed`. A ausência de evento de toque
+  (`ringing`) **não reprova** uma chamada funcional (spec rev 3).
+- **Evidência:** sequência de eventos com horários; Call-ID da perna; anotar se
+  houve ou não evento de toque.
 - **Registrar:** o provedor emite *early media*/toque ou o toque é local?
 - **Conclusão:** ☐ validado ☐ não suportado ☐ inconclusivo
 
@@ -76,12 +79,17 @@ Para cada teste: **Procedimento → Esperado → Evidência → Conclusão**.
 ### T4. Áudio bidirecional e codecs
 
 - **Procedimento:** em chamada atendida, falar nos dois lados e conferir áudio.
-  Capturar o SDP negociado (`getStats` ou log do UA).
-- **Esperado:** áudio nos dois sentidos; codec negociado (Opus, PCMU ou PCMA);
-  sem mudo unilateral; latência perceptível aceitável.
-- **Evidência:** SDP final **sanitizado**, codec escolhido, `getStats`
-  (packetsReceived/Sent > 0 nos dois sentidos), observação humana.
-- **Registrar:** transcodificação no provedor? Qualidade com PCMU vs Opus.
+  Capturar o SDP negociado e o `getStats`.
+- **Esperado:** áudio nos dois sentidos; codec **efetivamente usado** (Opus,
+  PCMU ou PCMA); sem mudo unilateral; latência perceptível aceitável.
+- **Evidência:** SDP final **sanitizado** (mostra o que foi *negociado*, não
+  necessariamente o usado); `getStats` com `packetsSent`/`packetsReceived` > 0
+  nos dois sentidos e o **codec usado** obtido relacionando o `codecId` dos
+  fluxos RTP (`outbound-rtp`/`inbound-rtp`) ao relatório `codec` (`mimeType`,
+  `payloadType`); observação humana.
+- **Registrar:** qualidade com PCMU vs Opus. Transcodificação no provedor só
+  pode ser afirmada com **evidência do próprio provedor** (documentação, CDR ou
+  painel); caso contrário registrar "não determinado".
 - **Conclusão:** ☐ validado ☐ não suportado ☐ inconclusivo
 
 ### T5. DTMF
@@ -160,32 +168,52 @@ Para cada teste: **Procedimento → Esperado → Evidência → Conclusão**.
 
 ## 2. Gravação e CDR
 
-Esta seção decide a fase 3. Fazer com 3 chamadas distintas: saída atendida,
-entrada atendida e uma **transferida**.
+Esta seção decide a fase 3. Fazer com chamadas **simples** (saída atendida e
+entrada atendida), que são o critério de bloqueio da fase 3.
 
-### G1. Identificadores por perna
+**Gravação em transferência é cobertura separada.** O cenário de chamada
+transferida só se aplica se T7 (cega) ou T8 (assistida) for validado. Se a
+transferência não for suportada, o cenário fica **não aplicável**, com a
+justificativa, e **não bloqueia** a gravação de chamadas simples. Cada teste
+aplicável tem **uma única conclusão**; a cobertura de gravação em
+transferências é registrada à parte, na tabela G1b.
+
+### G1. Identificadores por perna (chamadas simples)
 
 Para cada chamada, preencher:
 
-| Chamada | Call-ID SIP no navegador | ID da chamada no CDR | ID da gravação | Pernas (A↔ramal, ramal↔C) | IDs iguais entre pernas? |
+| Chamada | Call-ID SIP no navegador | ID da chamada no CDR | ID da gravação | Pernas | IDs iguais entre pernas? |
 |---|---|---|---|---|---|
 | Saída | | | | | |
 | Entrada | | | | | |
-| Transferida | | | | | |
 
 - **Esperado:** descobrir **qual identificador** correlaciona navegador, CDR e
-  gravação, e se ele muda em transferência/encaminhamento.
+  gravação.
 - **Conclusão:** ☐ validado ☐ não suportado ☐ inconclusivo
+
+### G1b. Cobertura de gravação em transferências (separada, não bloqueante)
+
+Aplicável só se T7 ou T8 foi validado; senão marcar **não aplicável** e
+justificar (por exemplo, "T7/T8 não suportados").
+
+| Cenário | Aplicável? (justificativa) | Call-ID por perna | ID CDR | ID gravação | Muda entre pernas? | Gravação cobre as duas pernas? |
+|---|---|---|---|---|---|---|
+| Transferência cega | | | | | | |
+| Transferência assistida | | | | | | |
+
+- **Resultado:** ☐ coberta ☐ parcial ☐ não coberta ☐ não aplicável
+  (registro de cobertura; **não** é conclusão de bloqueio).
 
 ### G2. Correlação com a chamada do Whatc
 
 - **Procedimento:** tentar, **apenas com dados disponíveis ao Whatc**
   (`sip_call_id`, horários, números, ramal), localizar a gravação certa no
-  provedor para as 3 chamadas, sem olhar o painel.
+  provedor para as chamadas simples, sem olhar o painel.
 - **Esperado:** correlação **determinística** (identificador exato), não por
   proximidade de horário. Registrar se há ambiguidade (duas chamadas
   simultâneas do mesmo ramal ou número).
-- **Evidência:** a regra de correlação usada e o resultado nas 3 chamadas.
+- **Evidência:** a regra de correlação usada e o resultado nas chamadas
+  simples.
 - **Conclusão:** ☐ validado ☐ não suportado ☐ inconclusivo
 
 ### G3. Acesso à gravação
@@ -225,6 +253,7 @@ Para cada chamada, preencher:
 | T10 Suspensão/reconexão | | | |
 | T11 Várias abas | | | |
 | G1 Identificadores | | | |
+| G1b Gravação em transferências (cobertura, não bloqueante) | | | |
 | G2 Correlação | | | |
 | G3 Acesso | | | |
 | G4 CDR | | | |
@@ -238,7 +267,7 @@ fase que depende dela.
 |---|---|---|
 | **1 — Núcleo** | T1, T2, T3 ou T4 **não suportado** ou **inconclusivo**; T9 sem caminho de mídia em NAT doméstico | T5–T8, T11 e toda a seção G |
 | **2 — Controles** | T6 ou T5 não suportado bloqueia o item correspondente; T7 não suportado bloqueia só a transferência | **T8 (assistida) não suportada não bloqueia** o núcleo nem a fase 2: entrega só cega |
-| **3 — Gravação** | **G1 ou G2 sem correlação determinística comprovada**, ou G3 sem acesso programático | Falhas em T5–T8; a fase 3 não depende delas |
+| **3 — Gravação** | **G1 ou G2 sem correlação determinística comprovada** (chamadas simples), ou G3 sem acesso programático | Falhas em T5–T8; G1b (transferência) não coberta ou não aplicável: a fase 3 grava chamadas simples e documenta a limitação |
 
 Regras adicionais:
 
