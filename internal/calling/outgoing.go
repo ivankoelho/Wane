@@ -3,6 +3,7 @@ package calling
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,22 +71,8 @@ func (m *Manager) InitiateOutgoingCall(
 		BridgeStarted:  make(chan struct{}),
 	}
 
-	// 4. Capture agent's remote track
-	agentPC.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		m.log.Info("Received agent remote track",
-			"call_log_id", callLog.ID,
-			"codec", track.Codec().MimeType,
-		)
-		if track.Codec().MimeType == "audio/telephone-event" {
-			return
-		}
-		session.mu.Lock()
-		session.AgentRemoteTrack = track
-		session.mu.Unlock()
-
-		// Consume until bridge takes over
-		go m.consumeAudioTrack(session, track)
-	})
+	// 4. Agent's remote track is captured below (step 9), once both local
+	// tracks exist, so either remote track can start the bridge.
 
 	agentPC.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		m.log.Info("Agent PC state changed",
@@ -141,7 +128,38 @@ func (m *Manager) InitiateOutgoingCall(
 		return uuid.Nil, "", fmt.Errorf("failed to create WA local track: %w", err)
 	}
 
-	// 9. Capture WhatsApp's remote track → start bridge
+	// 9. Capture both remote tracks → start bridge once both are ready.
+	// The tracks can arrive in either order, so both handlers try to start it.
+	var bridgeOnce sync.Once
+	tryStartBridge := func() {
+		session.mu.Lock()
+		wa, ag := session.WARemoteTrack, session.AgentRemoteTrack
+		session.mu.Unlock()
+		if wa == nil || ag == nil {
+			return
+		}
+		bridgeOnce.Do(func() {
+			m.startOutgoingBridge(session, wa, ag, agentLocalTrack, waLocalTrack)
+		})
+	}
+
+	agentPC.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+		m.log.Info("Received agent remote track",
+			"call_log_id", callLog.ID,
+			"codec", track.Codec().MimeType,
+		)
+		if track.Codec().MimeType == "audio/telephone-event" {
+			return
+		}
+		session.mu.Lock()
+		session.AgentRemoteTrack = track
+		session.mu.Unlock()
+
+		// Consume until bridge takes over
+		go m.consumeAudioTrack(session, track)
+		tryStartBridge()
+	})
+
 	waPC.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		m.log.Info("Received WA remote track",
 			"call_log_id", callLog.ID,
@@ -152,13 +170,9 @@ func (m *Manager) InitiateOutgoingCall(
 		}
 		session.mu.Lock()
 		session.WARemoteTrack = track
-		agentRemote := session.AgentRemoteTrack
 		session.mu.Unlock()
 
-		// Start audio bridge when both remote tracks are ready
-		if agentRemote != nil {
-			m.startOutgoingBridge(session, track, agentRemote, agentLocalTrack, waLocalTrack)
-		}
+		tryStartBridge()
 	})
 
 	waPC.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
