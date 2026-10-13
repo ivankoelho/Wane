@@ -83,7 +83,8 @@ async function saveContact(claim = false) {
     return
   }
   isSubmitting.value = true
-  duplicate.value = null
+  // `duplicate` stays up while a claim is retried, so a refusal (403) leaves the
+  // agent looking at why they were asked, not at a form that lost its context.
   try {
     const response = await contactsService.create({
       phone_number: formData.value.phone_number.trim(),
@@ -93,7 +94,7 @@ async function saveContact(claim = false) {
       claim: claim || undefined
     })
     const contact = response.data?.data || response.data
-    toast.success(t('common.createdSuccess', { resource: t('resources.Contact') }))
+    toast.success(claim ? t('contacts.claimedSuccess') : t('common.createdSuccess', { resource: t('resources.Contact') }))
     emit('update:open', false)
     emit('created', contact)
   } catch (error: any) {

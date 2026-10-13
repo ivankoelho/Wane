@@ -104,7 +104,8 @@ POST /api/contacts
   "account_id": "uuid",
   "metadata": {
     "custom_field": "value"
-  }
+  },
+  "claim": false
 }
 ```
 
@@ -122,6 +123,37 @@ POST /api/contacts
   }
 }
 ```
+
+### Number already registered
+
+The number is matched against the organization's existing contacts in every spelling (formatting, and Brazil's 8/9-digit mobile form). When it already exists the call does not create a duplicate.
+
+| Existing contact | Result |
+|---|---|
+| Held by another user, or by an active attendance of another agent | `409`, `data.code = "contact_exists_assigned"` |
+| Already assigned to the caller | `409`, `data.code = "contact_exists_assigned"`, `assigned_to_me: true` |
+| Unassigned (main queue) and `claim` is not `true` | `409`, `data.code = "contact_exists_unassigned"`. Nothing is changed. |
+| Unassigned and `claim: true` | The caller takes it (`200`, the contact), subject to the rules below. |
+| Soft-deleted | Restored (`200`). |
+
+```json
+{
+  "status": "error",
+  "message": "Contact with this phone number already exists",
+  "data": {
+    "code": "contact_exists_assigned",
+    "contact_name": "Maria",
+    "assigned_user_name": "Caio",
+    "assigned_to_me": false
+  }
+}
+```
+
+`claim: true` is a request, not an authorization. It needs `contacts:write` and then follows the same rules as picking from the queue: with an active queue attendance the org must allow queue pickup, the caller needs `transfers:pickup` (or `transfers:write` / `conversations:view_all`), must belong to the attendance's team, and must be available and connected; the claim is atomic, so when two users confirm at once one gets `200` and the other `409`. Refusals answer `403` with the reason.
+
+:::caution[Breaking change for integrations]
+Before, a `POST /api/contacts` for an existing unassigned contact silently assigned it to the caller and answered `200`. It now answers `409` (`contact_exists_unassigned`) unless the request carries `"claim": true`. Integrations that relied on the silent takeover must either send `claim: true` after confirming, or handle the `409`. Integrations that only create new numbers are not affected. A `409` for a contact held by someone else was already the behavior; it now carries `data` with the contact and owner name.
+:::
 
 ## Update Contact
 

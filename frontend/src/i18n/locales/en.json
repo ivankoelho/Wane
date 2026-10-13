@@ -572,6 +572,7 @@
     "duplicateMine": "This contact is already assigned to you. Search for it in your contacts.",
     "duplicateUnknownOwner": "another user",
     "duplicateClaim": "Take this contact",
+    "claimedSuccess": "Contact taken. It is now in your list.",
     "phonePlaceholder": "919876543210",
     "phoneHint": "Enter phone number with country code (without +)",
     "namePlaceholder": "John Doe",
