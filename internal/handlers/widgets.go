@@ -192,7 +192,7 @@ var occurrenceDashboardWidgets = []models.Widget{
 // (organization_id, data_source, field) WHERE is_default if it's ever hit.
 func (a *App) ensureDefaultSACWidgets(orgID uuid.UUID) error {
 	var count int64
-	if err := a.DB.Model(&models.Widget{}).
+	if err := a.DB.Unscoped().Model(&models.Widget{}).
 		Where("organization_id = ? AND data_source = ? AND is_default = true", orgID, "occurrences").
 		Count(&count).Error; err != nil {
 		return err
@@ -276,7 +276,7 @@ var salesOpportunityDashboardWidgets = []models.Widget{
 // double-seed race on an org's very first ever widget fetch).
 func (a *App) ensureDefaultSalesOpportunityWidgets(orgID uuid.UUID) error {
 	var count int64
-	if err := a.DB.Model(&models.Widget{}).
+	if err := a.DB.Unscoped().Model(&models.Widget{}).
 		Where("organization_id = ? AND data_source = ? AND is_default = true", orgID, "sales_opportunities").
 		Count(&count).Error; err != nil {
 		return err
@@ -565,8 +565,8 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Only the owner can edit the widget
-	if widget.UserID == nil || *widget.UserID != userID {
+	// Only the owner (or anyone, for ownerless system widgets) can edit
+	if !canManageWidget(widget, userID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Only the widget owner can edit this widget", nil, "")
 	}
 
@@ -688,8 +688,8 @@ func (a *App) DeleteWidget(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Only the owner can delete the widget
-	if widget.UserID == nil || *widget.UserID != userID {
+	// Only the owner (or anyone, for ownerless system widgets) can delete
+	if !canManageWidget(widget, userID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Only the widget owner can delete this widget", nil, "")
 	}
 
@@ -821,7 +821,7 @@ func widgetToResponse(w models.Widget, currentUserID uuid.UUID) WidgetResponse {
 		Config:       config,
 		IsShared:     w.IsShared,
 		IsDefault:    w.IsDefault,
-		IsOwner:      w.UserID != nil && *w.UserID == currentUserID,
+		IsOwner:      canManageWidget(&w, currentUserID),
 		CreatedAt:    w.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:    w.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
@@ -1811,4 +1811,11 @@ func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []Filt
 		}
 	}
 	return tableRows
+}
+
+// canManageWidget: the owner manages their widget; ownerless widgets (the
+// seeded SAC/sales defaults) are manageable by anyone who already passed the
+// analytics permission check.
+func canManageWidget(w *models.Widget, userID uuid.UUID) bool {
+	return w.UserID == nil || *w.UserID == userID
 }
