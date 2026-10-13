@@ -6,3 +6,9 @@ export function formatCurrency(value?: number | null): string {
   if (value == null) return '—'
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
+
+// The editable form of an amount, without the symbol (MoneyInput shows "R$"): "1.799,99".
+export function formatMoneyInput(value?: number | null): string {
+  if (value == null) return ''
+  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+}

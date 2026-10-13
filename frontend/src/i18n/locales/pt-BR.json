@@ -3777,7 +3777,7 @@
     "createDialogDesc": "Cria uma oportunidade de venda vinculada a este contato, com os mesmos campos usados pelo fluxo do chatbot.",
     "interest": "Interesse",
     "interestPlaceholder": "O que o cliente está buscando?",
-    "estimatedValuePlaceholder": "Ex.: 3500,00",
+    "estimatedValuePlaceholder": "3.500,00",
     "opportunityCreated": "Oportunidade criada",
     "opportunityCreateFailed": "Falha ao criar oportunidade",
     "conversionRecorded": "Oportunidade marcada como convertida",

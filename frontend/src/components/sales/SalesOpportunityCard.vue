@@ -5,11 +5,11 @@ import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { salesOpportunitiesService } from '@/services/api'
 import type { SalesOpportunity, SalesDirecionamento } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency, formatMoneyInput } from '@/lib/currency'
+import MoneyInput from '@/components/sales/MoneyInput.vue'
 import XProcessLinkForm from '@/components/sales/XProcessLinkForm.vue'
 import SalesOpportunityDetailsDialog from '@/components/sales/SalesOpportunityDetailsDialog.vue'
 import { formatQuantity, parseDecimalInput } from '@/lib/salesUnits'
@@ -61,7 +61,7 @@ const savingValue = ref(false)
 
 function startEditValue() {
   if (props.opportunity.status !== 'aberta') return
-  valueDraft.value = props.opportunity.estimated_value != null ? String(props.opportunity.estimated_value) : ''
+  valueDraft.value = formatMoneyInput(props.opportunity.estimated_value)
   editingValue.value = true
 }
 
@@ -122,12 +122,9 @@ async function saveValue() {
       {{ opportunity.contact?.profile_name || opportunity.contact_id }}
     </p>
     <div v-if="editingValue" class="mt-1" @click.stop @mousedown.stop>
-      <Input
+      <MoneyInput
         v-model="valueDraft"
         data-testid="sales-opportunity-value-input"
-        type="number"
-        step="0.01"
-        min="0"
         class="h-7 text-xs"
         autofocus
         @keyup.enter="saveValue"
