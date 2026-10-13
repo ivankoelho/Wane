@@ -179,7 +179,7 @@ func TestUpsertSalesOpportunityXProcessLink_ResolvedBetweenReadAndWrite_FallsBac
 		require.NoError(t, app.DB.Model(&models.SalesOpportunityXProcessLink{}).
 			Where("sales_opportunity_id = ?", opp.ID).Update("resolved_at", time.Now()).Error)
 	}))
-	defer app.DB.Callback().Query().Remove(hookName)
+	defer func() { require.NoError(t, app.DB.Callback().Query().Remove(hookName)) }()
 
 	second := testutil.NewJSONRequest(t, map[string]any{"num_pedido": "222", "documento": "11144477735"})
 	testutil.SetAuthContext(second, org.ID, agent.ID)

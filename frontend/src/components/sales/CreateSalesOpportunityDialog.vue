@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SALES_UNITS, parseDecimalInput } from '@/lib/salesUnits'
+import MoneyInput from '@/components/sales/MoneyInput.vue'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { salesOpportunitiesService } from '@/services/api'
 import type { SalesOpportunity } from '@/services/api'
@@ -40,13 +41,10 @@ function closeDialog() {
 }
 
 async function submit() {
-  let value: number | undefined
-  if (estimatedValue.value.trim() !== '') {
-    value = Number(estimatedValue.value)
-    if (Number.isNaN(value)) {
-      toast.error(t('sales.estimatedValueInvalid'))
-      return
-    }
+  const value = parseDecimalInput(estimatedValue.value)
+  if (Number.isNaN(value)) {
+    toast.error(t('sales.estimatedValueInvalid'))
+    return
   }
 
   const quantity = parseDecimalInput(estimatedQuantity.value)
@@ -89,7 +87,7 @@ async function submit() {
         </div>
         <div class="space-y-2">
           <Label>{{ $t('sales.columnEstimatedValue') }}</Label>
-          <Input v-model="estimatedValue" type="text" inputmode="decimal" :placeholder="$t('sales.estimatedValuePlaceholder')" />
+          <MoneyInput v-model="estimatedValue" :placeholder="$t('sales.estimatedValuePlaceholder')" />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-2">

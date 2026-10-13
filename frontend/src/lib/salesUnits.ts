@@ -11,10 +11,12 @@ export function formatQuantity(quantity?: number | null, unit?: string | null): 
   return unit ? `${n} ${unit === 'M2' ? 'm²' : unit}` : n
 }
 
-// Parses what a user types in a decimal field ("12,5" or "12.5").
-// '' -> undefined (not filled in); anything unparseable or negative -> NaN.
+// Parses what a user types in a decimal field: "12,5", "12.5" or "1.799,99".
+// With a comma the dots are thousands separators (pt-BR); without one a dot is
+// the decimal point. '' -> undefined (not filled in); unparseable or negative -> NaN.
 export function parseDecimalInput(raw: string): number | undefined {
-  const s = raw.trim().replace(',', '.')
+  let s = raw.trim()
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
   if (s === '') return undefined
   const n = Number(s)
   return Number.isFinite(n) && n >= 0 ? n : NaN

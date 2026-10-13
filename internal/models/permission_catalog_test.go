@@ -16,8 +16,8 @@ func TestPermissionCatalogGroupsEveryKey(t *testing.T) {
 			t.Errorf("%s is not mapped to a functional group", key)
 		}
 	}
-	if len(seen) != 117 {
-		t.Errorf("catalog has %d keys, want 117 (a key was added or removed: update this test on purpose)", len(seen))
+	if len(seen) != 119 {
+		t.Errorf("catalog has %d keys, want 119 (a key was added or removed: update this test on purpose)", len(seen))
 	}
 
 	owner := map[string]string{}
@@ -35,7 +35,7 @@ func TestPermissionPresentationOrder(t *testing.T) {
 	_, _, read := PermissionPresentation(ResourceUsers, ActionRead)
 	_, _, write := PermissionPresentation(ResourceUsers, ActionWrite)
 	_, _, teamsRead := PermissionPresentation(ResourceTeams, ActionRead)
-	if !(read < write && write < teamsRead) {
+	if read >= write || write >= teamsRead {
 		t.Errorf("order wrong: %d %d %d", read, write, teamsRead)
 	}
 	if g, _, _ := PermissionPresentation("nope", "read"); g != PermissionGroupOther {

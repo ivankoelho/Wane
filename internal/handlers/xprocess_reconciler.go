@@ -101,9 +101,10 @@ func (a *App) reconcileXProcessLink(client *xprocess.Client, apiKey string, link
 		}
 
 	case "CANCELADO":
-		if opp.Status == models.SalesOpportunityStatusConvertida {
+		switch opp.Status {
+		case models.SalesOpportunityStatusConvertida:
 			a.cancelXProcessOpportunity(&opp, link)
-		} else if opp.Status == models.SalesOpportunityStatusAberta {
+		case models.SalesOpportunityStatusAberta:
 			a.loseXProcessOpportunity(&opp, link)
 		}
 		updates["resolved_at"] = now

@@ -1831,6 +1831,7 @@ func TestApp_CreateContact_ClaimingExisting_PersistsCPFCNPJ(t *testing.T) {
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"phone_number": existing.PhoneNumber,
+		"claim":        true,
 		"cpf_cnpj":     "037.138.295-51",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)

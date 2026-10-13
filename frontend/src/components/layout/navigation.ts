@@ -17,7 +17,9 @@ import {
   PhoneForwarded,
   ScrollText,
   ClipboardList,
-  TrendingUp
+  TrendingUp,
+  Receipt,
+  BookOpen
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
@@ -91,6 +93,13 @@ export const navigationSections: NavSection[] = [
         // reserves for manager/admin (view_all) — agents only get read/write
         // on their own opportunities. /sales/operation stays plain 'read'.
         permissionAction: 'view_all'
+      },
+      {
+        name: 'nav.knowledge',
+        path: '/knowledge',
+        icon: BookOpen,
+        color: 'text-amber-400 light:text-amber-600',
+        permission: 'knowledge'
       },
     ]
   },
@@ -170,7 +179,7 @@ export const navigationSections: NavSection[] = [
         path: '/settings',
         icon: Settings,
         permission: 'settings.general',
-        childPermissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'knowledge', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'occurrences.stages', 'occurrences.categories', 'occurrences.what_happened', 'occurrences.processes', 'occurrences.sla_policies', 'units', 'departments', 'settings.sso', 'audit_logs'],
+        childPermissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'occurrences.stages', 'occurrences.categories', 'occurrences.what_happened', 'occurrences.processes', 'occurrences.sla_policies', 'units', 'departments', 'whatsapp_usage', 'settings.sso', 'audit_logs'],
         groups: [
           {
             label: 'nav.groupOrganization',
@@ -183,13 +192,14 @@ export const navigationSections: NavSection[] = [
           {
             label: 'nav.groupChannels',
             items: [
-              { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' }
+              { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
+              { name: 'nav.whatsappUsage', path: '/settings/whatsapp-usage', icon: Receipt, permission: 'whatsapp_usage' }
             ]
           },
           {
             label: 'nav.groupService',
             items: [
-              { name: 'nav.groupService', path: '/settings/service', icon: Bot, childPermissions: ['settings.chatbot', 'canned_responses', 'tags', 'contacts', 'knowledge'] }
+              { name: 'nav.groupService', path: '/settings/service', icon: Bot, childPermissions: ['settings.chatbot', 'canned_responses', 'tags', 'contacts'] }
             ]
           },
           {

@@ -62,6 +62,9 @@ jobs:
           name = "Whatomate"
           environment = "test"
           debug = true
+          # Test-only value. AI API keys are stored encrypted and saving one fails
+          # closed without a key (ai-providers.spec.ts needs a successful save).
+          encryption_key = "e2e-only-encryption-key-not-a-secret-0123456789"
 
           [server]
           host = "0.0.0.0"

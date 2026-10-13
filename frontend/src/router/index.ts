@@ -200,7 +200,15 @@ const router = createRouter({
           path: 'settings/service',
           name: 'settings-service',
           component: () => import('@/views/settings/ServiceSettingsHubView.vue'),
-          meta: { anyPermission: ['settings.chatbot', 'canned_responses', 'tags', 'contacts', 'knowledge'] }
+          meta: { anyPermission: ['settings.chatbot', 'canned_responses', 'tags', 'contacts'] },
+          // The knowledge base left this hub and has its own menu entry; keep old links working.
+          beforeEnter: (to) => (to.query.tab === 'knowledge' ? { path: '/knowledge', replace: true } : true)
+        },
+        {
+          path: 'knowledge',
+          name: 'knowledge',
+          component: () => import('@/views/settings/KnowledgeView.vue'),
+          meta: { permission: 'knowledge' }
         },
         {
           path: 'settings/chatbot',
@@ -212,6 +220,12 @@ const router = createRouter({
           name: 'accounts',
           component: () => import('@/views/settings/AccountsView.vue'),
           meta: { permission: 'accounts' }
+        },
+        {
+          path: 'settings/whatsapp-usage',
+          name: 'whatsapp-usage',
+          component: () => import('@/views/settings/WhatsAppUsageHubView.vue'),
+          meta: { permission: 'whatsapp_usage' }
         },
         {
           path: 'settings/accounts/:id',
@@ -426,6 +440,7 @@ const navigationOrder = [
   { path: '/crm/occurrences', permission: 'occurrences' },
   { path: '/sales/operation', permission: 'sales_opportunities' },
   { path: '/sales/dashboard', permission: 'sales_opportunities', action: 'view_all' },
+  { path: '/knowledge', permission: 'knowledge' },
   { path: '/chatbot', permission: 'settings.chatbot', childPaths: [
     { path: '/chatbot', permission: 'settings.chatbot' },
     { path: '/chatbot/keywords', permission: 'chatbot.keywords' },
@@ -447,10 +462,10 @@ const navigationOrder = [
     { path: '/settings', permission: 'settings.general' },
     { path: '/settings/service', permission: 'settings.chatbot' },
     { path: '/settings/accounts', permission: 'accounts' },
+    { path: '/settings/whatsapp-usage', permission: 'whatsapp_usage' },
     { path: '/settings/service', permission: 'canned_responses' },
     { path: '/settings/service', permission: 'contacts' },
     { path: '/settings/service', permission: 'tags' },
-    { path: '/settings/service', permission: 'knowledge' },
     { path: '/settings/access', permission: 'teams' },
     { path: '/settings/access', permission: 'users' },
     { path: '/settings/access', permission: 'roles' },
