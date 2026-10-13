@@ -40,13 +40,10 @@ function closeDialog() {
 }
 
 async function submit() {
-  let value: number | undefined
-  if (estimatedValue.value.trim() !== '') {
-    value = Number(estimatedValue.value)
-    if (Number.isNaN(value)) {
-      toast.error(t('sales.estimatedValueInvalid'))
-      return
-    }
+  const value = parseDecimalInput(estimatedValue.value)
+  if (Number.isNaN(value)) {
+    toast.error(t('sales.estimatedValueInvalid'))
+    return
   }
 
   const quantity = parseDecimalInput(estimatedQuantity.value)

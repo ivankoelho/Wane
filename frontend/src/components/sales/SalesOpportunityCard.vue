@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/api-utils'
 import { formatCurrency } from '@/lib/currency'
 import XProcessLinkForm from '@/components/sales/XProcessLinkForm.vue'
 import SalesOpportunityDetailsDialog from '@/components/sales/SalesOpportunityDetailsDialog.vue'
-import { formatQuantity } from '@/lib/salesUnits'
+import { formatQuantity, parseDecimalInput } from '@/lib/salesUnits'
 import { Pencil } from 'lucide-vue-next'
 
 const props = defineProps<{ opportunity: SalesOpportunity; disabled?: boolean }>()
@@ -72,8 +72,8 @@ async function saveValue() {
   // details endpoint only ever sets fields it's given, spec §4 has no
   // requirement to unset) — treat it as a no-op cancel instead of erroring.
   if (raw === '') return
-  const parsed = Number(raw)
-  if (Number.isNaN(parsed)) {
+  const parsed = parseDecimalInput(raw)
+  if (parsed === undefined || Number.isNaN(parsed)) {
     toast.error(t('sales.estimatedValueInvalid'))
     return
   }
