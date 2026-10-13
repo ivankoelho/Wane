@@ -185,7 +185,7 @@ func TestContactDocument_ClaimingExistingContactValidatesToo(t *testing.T) {
 	status, _ := e.createContact(t, map[string]any{"phone_number": existing.PhoneNumber, "cpf_cnpj": invalidCPFDigits})
 	assert.Equal(t, fasthttp.StatusBadRequest, status)
 
-	status, _ = e.createContact(t, map[string]any{"phone_number": existing.PhoneNumber, "cpf_cnpj": validCPF, "contact_type": "fornecedor"})
+	status, _ = e.createContact(t, map[string]any{"phone_number": existing.PhoneNumber, "cpf_cnpj": validCPF, "contact_type": "fornecedor", "claim": true})
 	require.Equal(t, fasthttp.StatusOK, status)
 	var stored models.Contact
 	require.NoError(t, e.app.DB.First(&stored, "id = ?", existing.ID).Error)

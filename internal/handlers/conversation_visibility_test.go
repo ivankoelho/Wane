@@ -1019,6 +1019,7 @@ func TestCreateContact_ClaimsExistingUnassignedContact(t *testing.T) {
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"phone_number": "+55 (11) 95555-4444",
 		"profile_name": "Claimed",
+		"claim":        true,
 	})
 	testutil.SetAuthContext(req, org.ID, agent.ID)
 	require.NoError(t, app.CreateContact(req))
@@ -1034,4 +1035,48 @@ func TestCreateContact_ClaimsExistingUnassignedContact(t *testing.T) {
 	var count int64
 	app.DB.Model(&models.Contact{}).Where("organization_id = ?", org.ID).Count(&count)
 	assert.Equal(t, int64(1), count, "no duplicate contact created")
+}
+
+// Existing + unassigned (main queue) no longer gets pulled in silently: the
+// agent is told it exists, and nothing changes until they confirm with claim.
+func TestCreateContact_UnassignedExistingAsksForConfirmation(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agent := createAdminUser(t, app, org.ID)
+	existing := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("5511955554444"))
+
+	req := testutil.NewJSONRequest(t, map[string]any{"phone_number": "5511955554444"})
+	testutil.SetAuthContext(req, org.ID, agent.ID)
+	require.NoError(t, app.CreateContact(req))
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+
+	var data map[string]any
+	testutil.ParseEnvelopeResponse(t, req, &data)
+	assert.Equal(t, "contact_exists_unassigned", data["code"])
+
+	var reloaded models.Contact
+	require.NoError(t, app.DB.First(&reloaded, "id = ?", existing.ID).Error)
+	assert.Nil(t, reloaded.AssignedUserID, "must stay in the queue until the agent confirms")
+}
+
+// A contact owned by someone else answers 409 naming the owner, so the agent
+// knows whom to ask for the transfer.
+func TestCreateContact_AssignedExistingNamesTheOwner(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agent := createAdminUser(t, app, org.ID)
+	owner := createAdminUser(t, app, org.ID)
+	existing := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("5511955554444"))
+	require.NoError(t, app.DB.Model(existing).Update("assigned_user_id", owner.ID).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{"phone_number": "5511955554444", "claim": true})
+	testutil.SetAuthContext(req, org.ID, agent.ID)
+	require.NoError(t, app.CreateContact(req))
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+
+	var data map[string]any
+	testutil.ParseEnvelopeResponse(t, req, &data)
+	assert.Equal(t, "contact_exists_assigned", data["code"])
+	assert.Equal(t, owner.FullName, data["assigned_user_name"])
+	assert.Equal(t, false, data["assigned_to_me"])
 }

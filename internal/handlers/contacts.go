@@ -1488,7 +1488,17 @@ type CreateContactRequest struct {
 	DepartmentID    *string        `json:"department_id"`
 	Tags            []string       `json:"tags"`
 	Metadata        map[string]any `json:"metadata"`
+	// Claim confirms taking over an existing unassigned (main queue) contact.
+	// Without it such a contact answers 409 so the agent sees it already exists.
+	Claim bool `json:"claim"`
 }
+
+// Codes carried in the data of a 409 from CreateContact so the UI can tell the
+// agent exactly why the number could not be added.
+const (
+	contactExistsAssigned   = "contact_exists_assigned"
+	contactExistsUnassigned = "contact_exists_unassigned"
+)
 
 // CreateContact creates a new contact or restores a soft-deleted one
 func (a *App) CreateContact(r *fastglue.Request) error {
@@ -1547,19 +1557,30 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil)
 			existingContact.DeletedAt.Valid = false
 		} else if existingContact.AssignedUserID != nil {
-			// Genuinely someone else's contact -- nothing to claim.
-			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
+			// Someone's contact -- nothing to claim. Say whose it is: the agent
+			// can't find it in their own (visibility-scoped) search, so a bare
+			// "already exists" leaves them with nobody to ask.
+			owner := a.assignedUserNames(orgID, []models.Contact{existingContact})[*existingContact.AssignedUserID]
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", map[string]any{
+				"code":               contactExistsAssigned,
+				"contact_name":       existingContact.ProfileName,
+				"assigned_user_name": owner,
+				"assigned_to_me":     *existingContact.AssignedUserID == userID,
+			}, "")
+		} else if !req.Claim {
+			// Existing but unassigned (main queue). FindContactUnscoped bypasses
+			// conversation-visibility scoping on purpose (dedup must see every
+			// spelling of a phone number), but ListContacts' search does not, so
+			// the agent can't see it and believes it is new. Taking it silently
+			// pulls it out of the queue, so ask first; the client resends with
+			// claim=true once the agent confirms.
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists in the main queue", map[string]any{
+				"code":         contactExistsUnassigned,
+				"contact_name": existingContact.ProfileName,
+			}, "")
 		}
-		// Reached for both a restored contact and an existing-but-unassigned
-		// one: FindContactUnscoped bypasses conversation-visibility scoping
-		// on purpose (dedup must see every spelling of a phone number,
-		// regardless of who can view it), but ListContacts' search does NOT.
-		// Under strict visibility, an agent searching for an unassigned
-		// contact that already exists gets no results, so from their side
-		// this really is "new" -- a flat 409 here would be a dead end they
-		// have no way to recover from (they can't see it to ask for it, and
-		// can't create it either). Claim it for them instead, same as the
-		// restore-soft-deleted case already did.
+		// Reached for a restored contact and for a confirmed claim of an
+		// unassigned one: the agent gets the contact assigned to them.
 		updates := map[string]any{}
 		if req.ProfileName != "" {
 			updates["profile_name"] = req.ProfileName

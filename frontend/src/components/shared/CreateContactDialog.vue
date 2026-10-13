@@ -12,8 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { contactsService, accountsService, type Tag } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
 import { toast } from 'vue-sonner'
-import { Loader2, Check, ChevronsUpDown, X } from 'lucide-vue-next'
-import { getErrorMessage } from '@/lib/api-utils'
+import { Loader2, Check, ChevronsUpDown, X, AlertTriangle } from 'lucide-vue-next'
+import { getErrorMessage, isConflictError } from '@/lib/api-utils'
 import { getTagColorClass } from '@/lib/constants'
 
 const { t } = useI18n()
@@ -40,6 +40,10 @@ const defaultFormData: ContactFormData = { phone_number: '', profile_name: '', w
 
 const formData = ref<ContactFormData>({ ...defaultFormData })
 const isSubmitting = ref(false)
+// Set when the number already exists: either someone owns it (nothing to do
+// here, the agent needs to ask them) or it sits unassigned in the main queue
+// and the agent can confirm taking it.
+const duplicate = ref<{ code: string; contactName: string; ownerName: string; assignedToMe: boolean } | null>(null)
 const tagSelectorOpen = ref(false)
 const availableTags = ref<Tag[]>([])
 const availableAccounts = ref<{ id: string; name: string; phone_number: string }[]>([])
@@ -47,6 +51,7 @@ const availableAccounts = ref<{ id: string; name: string; phone_number: string }
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     formData.value = { ...defaultFormData }
+    duplicate.value = null
     fetchTags()
     fetchAccounts()
   }
@@ -72,24 +77,36 @@ async function fetchAccounts() {
   }
 }
 
-async function saveContact() {
+async function saveContact(claim = false) {
   if (!formData.value.phone_number.trim()) {
     toast.error(t('contacts.phoneRequired'))
     return
   }
   isSubmitting.value = true
+  duplicate.value = null
   try {
     const response = await contactsService.create({
       phone_number: formData.value.phone_number.trim(),
       profile_name: formData.value.profile_name.trim() || undefined,
       whatsapp_account: formData.value.whatsapp_account || undefined,
-      tags: formData.value.tags.length > 0 ? formData.value.tags : undefined
+      tags: formData.value.tags.length > 0 ? formData.value.tags : undefined,
+      claim: claim || undefined
     })
     const contact = response.data?.data || response.data
     toast.success(t('common.createdSuccess', { resource: t('resources.Contact') }))
     emit('update:open', false)
     emit('created', contact)
-  } catch (error) {
+  } catch (error: any) {
+    const info = isConflictError(error) ? error.response?.data?.data : null
+    if (info?.code === 'contact_exists_assigned' || info?.code === 'contact_exists_unassigned') {
+      duplicate.value = {
+        code: info.code,
+        contactName: info.contact_name || '',
+        ownerName: info.assigned_user_name || '',
+        assignedToMe: !!info.assigned_to_me
+      }
+      return
+    }
     toast.error(getErrorMessage(error, t('common.failedCreate', { resource: t('resources.contact') })))
   } finally {
     isSubmitting.value = false
@@ -204,9 +221,26 @@ function closeDialog() {
           </div>
         </div>
       </div>
+      <div v-if="duplicate" class="flex gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm" role="alert">
+        <AlertTriangle class="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+        <div class="space-y-1">
+          <p class="font-medium">{{ $t('contacts.duplicateTitle') }}</p>
+          <p v-if="duplicate.code === 'contact_exists_unassigned'">
+            {{ $t('contacts.duplicateUnassigned', { name: duplicate.contactName || formData.phone_number }) }}
+          </p>
+          <p v-else-if="duplicate.assignedToMe">{{ $t('contacts.duplicateMine') }}</p>
+          <p v-else>
+            {{ $t('contacts.duplicateAssigned', { name: duplicate.contactName || formData.phone_number, owner: duplicate.ownerName || $t('contacts.duplicateUnknownOwner') }) }}
+          </p>
+        </div>
+      </div>
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="closeDialog">{{ $t('common.cancel') }}</Button>
-        <Button @click="saveContact" :disabled="isSubmitting">
+        <Button v-if="duplicate?.code === 'contact_exists_unassigned'" @click="saveContact(true)" :disabled="isSubmitting">
+          <Loader2 v-if="isSubmitting" class="h-4 w-4 mr-2 animate-spin" />
+          {{ $t('contacts.duplicateClaim') }}
+        </Button>
+        <Button v-else @click="saveContact()" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t('common.create') }}
         </Button>

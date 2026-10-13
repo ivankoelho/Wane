@@ -147,7 +147,7 @@ func TestCreateContact_ClaimingAnExistingContactAppliesTheSameRule(t *testing.T)
 	existing := testutil.CreateTestContactWith(t, e.app.DB, e.org.ID, testutil.WithPhoneNumber("5511992220001"),
 		testutil.WithContactPlacement(&unit.ID, nil)) // unassigned, cliente, with a legacy unit
 
-	status, c := e.createContact(t, map[string]any{"phone_number": "5511992220001", "unit_id": unit.ID.String()})
+	status, c := e.createContact(t, map[string]any{"phone_number": "5511992220001", "unit_id": unit.ID.String(), "claim": true})
 	require.Equal(t, fasthttp.StatusOK, status)
 	assert.Equal(t, existing.ID, c.ID)
 	assert.Nil(t, c.UnitID)
