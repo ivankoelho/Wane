@@ -63,6 +63,11 @@ const tagSelectorOpen = ref(false)
 const availableTags = ref<Tag[]>([])
 const availableAccounts = ref<{ id: string; name: string; phone_number: string }[]>([])
 
+// A different number is a different question: forget the previous answer.
+watch(() => formData.value.phone_number, () => {
+  duplicate.value = null
+})
+
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     formData.value = { ...defaultFormData }
@@ -173,7 +178,7 @@ function closeDialog() {
       <div class="space-y-4 py-4">
         <div class="space-y-2">
           <Label>{{ $t('contacts.phoneNumber') }} <span class="text-destructive">*</span></Label>
-          <Input v-model="formData.phone_number" :placeholder="$t('contacts.phonePlaceholder')" />
+          <Input v-model="formData.phone_number" data-testid="create-contact-phone" :placeholder="$t('contacts.phonePlaceholder')" />
           <p class="text-xs text-muted-foreground">{{ $t('contacts.phoneHint') }}</p>
         </div>
         <div class="space-y-2">
@@ -269,11 +274,12 @@ function closeDialog() {
       </div>
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="closeDialog">{{ $t('common.cancel') }}</Button>
-        <Button v-if="duplicate?.code === 'contact_exists_unassigned' && !duplicate.blockedReason" @click="saveContact(true)" :disabled="isSubmitting">
+        <Button v-if="duplicate?.code === 'contact_exists_unassigned' && !duplicate.blockedReason" data-testid="create-contact-claim" @click="saveContact(true)" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t('contacts.duplicateClaim') }}
         </Button>
-        <Button v-else @click="saveContact()" :disabled="isSubmitting">
+        <!-- Once the number is known to exist and cannot be taken, repeating the same request only repeats the answer. -->
+        <Button v-else data-testid="create-contact-submit" @click="saveContact()" :disabled="isSubmitting || !!duplicate">
           <Loader2 v-if="isSubmitting" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t('common.create') }}
         </Button>
