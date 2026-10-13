@@ -248,7 +248,7 @@ func (c *Confirmer) executeConfirmed(ctx context.Context, conf *models.AIToolCon
 
 	fin := FinishInput{ExecutionCallID: &callID}
 	out := Outcome{Status: models.AIToolCallExecuted, Duration: took}
-	text := TapResult{}
+	var text TapResult
 	switch {
 	case execErr != nil:
 		fin.Status, fin.ErrorKind = models.AIConfirmationFailed, models.AIConfirmationErrExecution

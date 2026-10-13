@@ -126,7 +126,7 @@ func parseManualFile(path string) ([]ManualDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only: a close error loses nothing
 	return ParseManualHTML(f)
 }
 

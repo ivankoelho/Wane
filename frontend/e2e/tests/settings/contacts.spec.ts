@@ -153,7 +153,11 @@ test.describe('Contacts Management', () => {
     await contactsPage.fillContactForm(phoneNumber, 'Duplicate Contact')
     await contactsPage.submitDialog()
 
-    await contactsPage.expectToast(/already exists/i)
+    // No duplicate is created: the dialog says the number exists (here it is already
+    // ours) and blocks repeating the same request until the phone changes.
+    await expect(contactsPage.dialog.getByRole('alert')).toContainText(/already registered/i)
+    await expect(contactsPage.dialog.getByRole('alert')).toContainText(/assigned to you/i)
+    await expect(contactsPage.dialog.getByRole('button', { name: /^Create$/i })).toBeDisabled()
   })
 
   test('should cancel contact creation', async () => {

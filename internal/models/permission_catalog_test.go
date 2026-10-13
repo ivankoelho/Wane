@@ -35,7 +35,7 @@ func TestPermissionPresentationOrder(t *testing.T) {
 	_, _, read := PermissionPresentation(ResourceUsers, ActionRead)
 	_, _, write := PermissionPresentation(ResourceUsers, ActionWrite)
 	_, _, teamsRead := PermissionPresentation(ResourceTeams, ActionRead)
-	if !(read < write && write < teamsRead) {
+	if read >= write || write >= teamsRead {
 		t.Errorf("order wrong: %d %d %d", read, write, teamsRead)
 	}
 	if g, _, _ := PermissionPresentation("nope", "read"); g != PermissionGroupOther {
