@@ -250,12 +250,14 @@ async function reindex(onlyStale: boolean) {
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
     <PageHeader :title="t('knowledge.title')" :icon="BookOpen" icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20">
       <template #actions>
-        <Button variant="outline" size="sm" data-testid="knowledge-search-toggle" :aria-label="t('knowledge.searchTool')" @click="searchOpen = !searchOpen">
-          <Search class="h-4 w-4 sm:mr-2" /><span class="hidden sm:inline">{{ t('knowledge.searchTool') }}</span>
-        </Button>
-        <Button v-if="canWrite" size="sm" data-testid="knowledge-create" @click="openCreate">
-          <Plus class="h-4 w-4 mr-2" />{{ t('knowledge.create') }}
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button variant="outline" size="sm" data-testid="knowledge-search-toggle" :aria-label="t('knowledge.searchTool')" @click="searchOpen = !searchOpen">
+            <Search class="h-4 w-4 sm:mr-2" /><span class="hidden sm:inline">{{ t('knowledge.searchTool') }}</span>
+          </Button>
+          <Button v-if="canWrite" size="sm" data-testid="knowledge-create" @click="openCreate">
+            <Plus class="h-4 w-4 mr-2" />{{ t('knowledge.create') }}
+          </Button>
+        </div>
       </template>
     </PageHeader>
 
