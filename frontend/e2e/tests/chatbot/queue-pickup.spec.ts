@@ -74,14 +74,18 @@ async function connectAgent(
   return context
 }
 
-// transferredAt is a SQL expression. Pick Next takes the OLDEST unassigned item
-// (FIFO) in the shared org, so a test that asserts which item it picked must seed
-// one older than anything another spec may have left queued.
-async function seedQueuedTransfer(orgId: string, contactId: string, phone: string, contactName: string, accountName: string, transferredAt = 'NOW()'): Promise<string> {
+// Pick Next takes the OLDEST unassigned item (FIFO) in an org shared with other
+// spec files and with earlier tests here, any of which may leave items queued.
+// Each seed is dated by mirroring the clock around 2000-01-01 (a later seed gets an
+// earlier date, across workers and retries too, and all of them predate anything
+// created now), so a Pick Next always takes the item seeded last.
+const PICK_FIRST = "TIMESTAMPTZ '2000-01-01' - (NOW() - TIMESTAMPTZ '2000-01-01')"
+
+async function seedQueuedTransfer(orgId: string, contactId: string, phone: string, contactName: string, accountName: string): Promise<string> {
   await closeActiveTransfers(contactId)
   const rows = await execSQL(`
     INSERT INTO agent_transfers (id, organization_id, contact_id, whats_app_account, phone_number, status, source, transferred_at, created_at, updated_at)
-    VALUES (gen_random_uuid(), '${orgId}', '${contactId}', '${accountName}', '${phone}', 'active', 'manual', ${transferredAt}, NOW(), NOW())
+    VALUES (gen_random_uuid(), '${orgId}', '${contactId}', '${accountName}', '${phone}', 'active', 'manual', ${PICK_FIRST}, NOW(), NOW())
     RETURNING id::text AS id
   `)
   return rows[0]!.id as string
@@ -211,7 +215,7 @@ test.describe('Pick from queue — agent flow', () => {
   // the org, which would be a much bigger refactor.
 
   test('Pick Next assigns the queued transfer and navigates to the chat', async ({ page }) => {
-    const reseed = () => seedQueuedTransfer(orgId, contactId, phone, contactName, accountName, "NOW() - INTERVAL '10 years'").then(() => {})
+    const reseed = () => seedQueuedTransfer(orgId, contactId, phone, contactName, accountName).then(() => {})
     await reseed()
 
     await loginAs(page, agent)
@@ -615,7 +619,7 @@ test.describe('Pickup respects assign_to_same_agent', () => {
     // Re-read: assigned_user_id remains nil, transfer is resumed.
     expect(await readContactAssignedUser(contactId)).toBeNull()
     const transferRows = await execSQL(
-      `SELECT status FROM agent_transfers WHERE contact_id = '${contactId}' ORDER BY transferred_at DESC LIMIT 1`,
+      `SELECT status FROM agent_transfers WHERE contact_id = '${contactId}' ORDER BY created_at DESC LIMIT 1`,
     )
     expect(transferRows[0]!.status).toBe('resumed')
   })
