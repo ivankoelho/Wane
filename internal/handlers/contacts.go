@@ -1488,6 +1488,161 @@ type CreateContactRequest struct {
 	DepartmentID    *string        `json:"department_id"`
 	Tags            []string       `json:"tags"`
 	Metadata        map[string]any `json:"metadata"`
+	// Claim confirms taking over an existing unassigned (main queue) contact.
+	// Without it such a contact answers 409 so the agent sees it already exists.
+	Claim bool `json:"claim"`
+}
+
+// Codes carried in the data of a 409 from CreateContact so the UI can tell the
+// agent exactly why the number could not be added.
+const (
+	contactExistsAssigned   = "contact_exists_assigned"
+	contactExistsUnassigned = "contact_exists_unassigned"
+)
+
+// currentContactOwner returns who holds a contact: the agent of its active
+// attendance when there is one (an active attendance wins over the carteira, see
+// authorizeConversation), otherwise the carteira owner. nil means nobody does.
+// The active attendance, if any, is returned so a claim can act on it.
+func (a *App) currentContactOwner(orgID uuid.UUID, c *models.Contact) (*uuid.UUID, *models.AgentTransfer) {
+	if t, ok := a.activeTransferFor(orgID, c.ID); ok {
+		if t.AgentID != nil {
+			return t.AgentID, &t
+		}
+		if c.AssignedUserID != nil {
+			return c.AssignedUserID, &t
+		}
+		return nil, &t
+	}
+	return c.AssignedUserID, nil
+}
+
+func (a *App) sendContactExistsAssigned(r *fastglue.Request, orgID, userID uuid.UUID, c *models.Contact, owner uuid.UUID) error {
+	var ownerName string
+	a.DB.Model(&models.User{}).Select("full_name").
+		Where("id = ? AND organization_id = ?", owner, orgID).Scan(&ownerName)
+	return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", map[string]any{
+		"code":               contactExistsAssigned,
+		"contact_name":       c.ProfileName,
+		"assigned_user_name": ownerName,
+		"assigned_to_me":     owner == userID,
+	}, "")
+}
+
+type claimResult int
+
+const (
+	claimOK claimResult = iota
+	claimForbidden
+	claimLost   // someone else took it between the read and the write
+	claimFailed // database error
+)
+
+// Stable codes for why an agent cannot take a contact. The client translates
+// them; the English text is only what a plain API caller sees.
+const (
+	claimBlockQueuePickupDisabled = "queue_pickup_disabled"
+	claimBlockPickupPermission    = "pickup_permission_required"
+	claimBlockNotTeamMember       = "not_team_member"
+	claimBlockAgentUnavailable    = "agent_unavailable"
+)
+
+var claimBlockMessages = map[string]string{
+	claimBlockQueuePickupDisabled: "Queue pickup is not allowed",
+	claimBlockPickupPermission:    "You don't have permission to pick up transfers",
+	claimBlockNotTeamMember:       "You are not a member of this team",
+	claimBlockAgentUnavailable:    "You must be active, available and connected to pick up transfers",
+}
+
+// claimBlockReason is the authorization half of a claim, free of side effects:
+// "" when userID may take the contact, otherwise one of the claimBlock* codes.
+// It follows PickNextTransfer: with an active queue attendance the org must
+// allow queue pickup, the caller needs transfers:pickup and membership of the
+// attendance's team, and must be eligible; with none, a contact that has a team
+// (its own or the account default) is only for that team's members.
+// Supervisors (transfers:write / conversations:view_all) skip the pickup and
+// team checks, as they do everywhere else.
+func (a *App) claimBlockReason(orgID, userID uuid.UUID, c *models.Contact, t *models.AgentTransfer) string {
+	supervisor := a.canOverrideConversationOwner(userID, orgID)
+
+	if t != nil {
+		if !supervisor {
+			settings, _ := a.getChatbotSettingsCached(orgID, "")
+			if settings != nil && !settings.AgentAssignment.AllowQueuePickup {
+				return claimBlockQueuePickupDisabled
+			}
+			if !a.HasPermission(userID, models.ResourceTransfers, models.ActionPickup, orgID) {
+				return claimBlockPickupPermission
+			}
+			if t.TeamID != nil && !a.userInTeam(userID, *t.TeamID) {
+				return claimBlockNotTeamMember
+			}
+		}
+		if !a.isAgentEligible(orgID, userID) {
+			return claimBlockAgentUnavailable
+		}
+		return ""
+	}
+
+	if !supervisor {
+		team := c.TeamID
+		if team == nil {
+			team = a.accountDefaultTeamID(orgID, c)
+		}
+		if team != nil && !a.userInTeam(userID, *team) {
+			return claimBlockNotTeamMember
+		}
+	}
+	return ""
+}
+
+// claimExistingContact lets an agent take an existing unowned contact, after
+// claimBlockReason allows it. With an active attendance it takes the attendance
+// with the shared atomic claim; with none it sets the carteira, also as a
+// compare-and-set. restore brings a soft-deleted contact back in the same step
+// that wins the claim, so a refused or lost claim never un-deletes anything.
+func (a *App) claimExistingContact(orgID, userID uuid.UUID, c *models.Contact, t *models.AgentTransfer, restore bool) (claimResult, string) {
+	if reason := a.claimBlockReason(orgID, userID, c, t); reason != "" {
+		return claimForbidden, reason
+	}
+
+	if t != nil {
+		claimed, err := a.claimTransfer(a.DB, t, userID)
+		if err != nil {
+			a.Log.Error("Failed to claim contact attendance", "error", err, "transfer_id", t.ID)
+			return claimFailed, ""
+		}
+		if !claimed {
+			a.auditDistribution(orgID, &userID, t.ID, distEventConflict, nil, nil, "claim from contact dialog lost the race")
+			return claimLost, ""
+		}
+		a.auditDistribution(orgID, &userID, t.ID, distEventClaimed, nil, &userID, "claimed from the add-contact dialog")
+		a.pinCarteiraOnClaim(c, userID)
+		a.broadcastTransferAssigned(t)
+		if restore {
+			if err := a.DB.Unscoped().Model(c).Update("deleted_at", nil).Error; err != nil {
+				a.Log.Error("Failed to restore claimed contact", "error", err, "contact_id", c.ID)
+				return claimFailed, ""
+			}
+		}
+		return claimOK, ""
+	}
+
+	updates := map[string]any{"assigned_user_id": userID}
+	if restore {
+		updates["deleted_at"] = nil
+	}
+	res := a.DB.Unscoped().Model(&models.Contact{}).
+		Where("id = ? AND organization_id = ? AND assigned_user_id IS NULL", c.ID, orgID).
+		Updates(updates)
+	if res.Error != nil {
+		a.Log.Error("Failed to claim contact", "error", res.Error, "contact_id", c.ID)
+		return claimFailed, ""
+	}
+	if res.RowsAffected != 1 {
+		return claimLost, ""
+	}
+	return claimOK, ""
 }
 
 // CreateContact creates a new contact or restores a soft-deleted one
@@ -1542,24 +1697,56 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 	found, findErr := contactutil.FindContactUnscoped(a.DB, orgID, req.PhoneNumber)
 	if findErr == nil {
 		existingContact := *found
-		if existingContact.DeletedAt.Valid {
-			// Restore soft-deleted contact
-			a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil)
-			existingContact.DeletedAt.Valid = false
-		} else if existingContact.AssignedUserID != nil {
-			// Genuinely someone else's contact -- nothing to claim.
-			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
+		// Authorization comes before anything is written, restoring a
+		// soft-deleted contact included: a contact held by someone else is
+		// reported as such and left exactly as it is, and an unowned one needs
+		// the same confirmed, rule-checked claim as a live one.
+		deleted := existingContact.DeletedAt.Valid
+		owner, attendance := a.currentContactOwner(orgID, &existingContact)
+		ownDeleted := deleted && owner != nil && *owner == userID
+		if owner != nil && !ownDeleted {
+			return a.sendContactExistsAssigned(r, orgID, userID, &existingContact, *owner)
 		}
-		// Reached for both a restored contact and an existing-but-unassigned
-		// one: FindContactUnscoped bypasses conversation-visibility scoping
-		// on purpose (dedup must see every spelling of a phone number,
-		// regardless of who can view it), but ListContacts' search does NOT.
-		// Under strict visibility, an agent searching for an unassigned
-		// contact that already exists gets no results, so from their side
-		// this really is "new" -- a flat 409 here would be a dead end they
-		// have no way to recover from (they can't see it to ask for it, and
-		// can't create it either). Claim it for them instead, same as the
-		// restore-soft-deleted case already did.
+		switch {
+		case ownDeleted:
+			// Your own contact, deleted: bringing it back needs no claim.
+			if err := a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil).Error; err != nil {
+				a.Log.Error("Failed to restore contact", "error", err)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to restore contact", nil, "")
+			}
+			existingContact.DeletedAt.Valid = false
+		case !req.Claim:
+			// Existing but unassigned (main queue). FindContactUnscoped bypasses
+			// conversation-visibility scoping on purpose (dedup must see every
+			// spelling of a phone number), but ListContacts search does not, so
+			// the agent cannot see it and believes it is new. Taking it silently
+			// pulls it out of the queue, so ask first; the client resends with
+			// claim=true once the agent confirms. When the agent could not take
+			// it anyway, say why now instead of offering a doomed action.
+			blocked := a.claimBlockReason(orgID, userID, &existingContact, attendance)
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists in the main queue", map[string]any{
+				"code":                 contactExistsUnassigned,
+				"contact_name":         existingContact.ProfileName,
+				"deleted":              deleted,
+				"can_claim":            blocked == "",
+				"claim_blocked_reason": blocked,
+			}, "")
+		default:
+			// claim=true is only a request: the same rules as picking from the
+			// queue still apply, and the claim itself is a compare-and-set.
+			switch res, reason := a.claimExistingContact(orgID, userID, &existingContact, attendance, deleted); res {
+			case claimForbidden:
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, claimBlockMessages[reason], map[string]any{"code": reason}, "")
+			case claimLost:
+				if owner, _ := a.currentContactOwner(orgID, &existingContact); owner != nil {
+					return a.sendContactExistsAssigned(r, orgID, userID, &existingContact, *owner)
+				}
+				return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact was changed by someone else", nil, "")
+			case claimFailed:
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim contact", nil, "")
+			}
+			existingContact.DeletedAt.Valid = false
+		}
 		updates := map[string]any{}
 		if req.ProfileName != "" {
 			updates["profile_name"] = req.ProfileName
@@ -1589,9 +1776,6 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		}
 		if req.Metadata != nil {
 			updates["metadata"] = models.JSONB(req.Metadata)
-		}
-		if existingContact.AssignedUserID == nil {
-			updates["assigned_user_id"] = userID
 		}
 		if len(updates) > 0 {
 			if err := a.DB.Model(&existingContact).Updates(updates).Error; err != nil {
