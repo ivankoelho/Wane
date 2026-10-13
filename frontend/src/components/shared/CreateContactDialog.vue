@@ -16,7 +16,7 @@ import { Loader2, Check, ChevronsUpDown, X, AlertTriangle } from 'lucide-vue-nex
 import { getErrorMessage, isConflictError } from '@/lib/api-utils'
 import { getTagColorClass } from '@/lib/constants'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const tagsStore = useTagsStore()
 
 interface Props {
@@ -43,7 +43,22 @@ const isSubmitting = ref(false)
 // Set when the number already exists: either someone owns it (nothing to do
 // here, the agent needs to ask them) or it sits unassigned in the main queue
 // and the agent can confirm taking it.
-const duplicate = ref<{ code: string; contactName: string; ownerName: string; assignedToMe: boolean } | null>(null)
+// `blockedReason` is a stable backend code (see contacts.claimBlocked.*) set when
+// the agent could not take the contact: the dialog then explains why instead of
+// offering an action that would be refused.
+const duplicate = ref<{
+  code: string
+  contactName: string
+  ownerName: string
+  assignedToMe: boolean
+  deleted: boolean
+  blockedReason: string
+} | null>(null)
+
+function claimBlockedText(reason: string): string {
+  const key = `contacts.claimBlocked.${reason}`
+  return te(key) ? t(key) : t('contacts.claimBlocked.unknown')
+}
 const tagSelectorOpen = ref(false)
 const availableTags = ref<Tag[]>([])
 const availableAccounts = ref<{ id: string; name: string; phone_number: string }[]>([])
@@ -98,14 +113,22 @@ async function saveContact(claim = false) {
     emit('update:open', false)
     emit('created', contact)
   } catch (error: any) {
-    const info = isConflictError(error) ? error.response?.data?.data : null
-    if (info?.code === 'contact_exists_assigned' || info?.code === 'contact_exists_unassigned') {
+    const info = error?.response?.data?.data
+    if (isConflictError(error) && (info?.code === 'contact_exists_assigned' || info?.code === 'contact_exists_unassigned')) {
       duplicate.value = {
         code: info.code,
         contactName: info.contact_name || '',
         ownerName: info.assigned_user_name || '',
-        assignedToMe: !!info.assigned_to_me
+        assignedToMe: !!info.assigned_to_me,
+        deleted: !!info.deleted,
+        blockedReason: info.can_claim === false ? (info.claim_blocked_reason || 'unknown') : ''
       }
+      return
+    }
+    // The claim was refused (403) with a stable code: show the reason in the
+    // dialog and drop the action, rather than a raw backend sentence.
+    if (error?.response?.status === 403 && claim && info?.code && duplicate.value) {
+      duplicate.value = { ...duplicate.value, blockedReason: info.code }
       return
     }
     toast.error(getErrorMessage(error, t('common.failedCreate', { resource: t('resources.contact') })))
@@ -226,9 +249,18 @@ function closeDialog() {
         <AlertTriangle class="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
         <div class="space-y-1">
           <p class="font-medium">{{ $t('contacts.duplicateTitle') }}</p>
-          <p v-if="duplicate.code === 'contact_exists_unassigned'">
-            {{ $t('contacts.duplicateUnassigned', { name: duplicate.contactName || formData.phone_number }) }}
-          </p>
+          <template v-if="duplicate.code === 'contact_exists_unassigned'">
+            <p v-if="duplicate.blockedReason">
+              {{ $t('contacts.duplicateBlocked', { name: duplicate.contactName || formData.phone_number }) }}
+              {{ claimBlockedText(duplicate.blockedReason) }}
+            </p>
+            <p v-else-if="duplicate.deleted">
+              {{ $t('contacts.duplicateDeleted', { name: duplicate.contactName || formData.phone_number }) }}
+            </p>
+            <p v-else>
+              {{ $t('contacts.duplicateUnassigned', { name: duplicate.contactName || formData.phone_number }) }}
+            </p>
+          </template>
           <p v-else-if="duplicate.assignedToMe">{{ $t('contacts.duplicateMine') }}</p>
           <p v-else>
             {{ $t('contacts.duplicateAssigned', { name: duplicate.contactName || formData.phone_number, owner: duplicate.ownerName || $t('contacts.duplicateUnknownOwner') }) }}
@@ -237,7 +269,7 @@ function closeDialog() {
       </div>
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="closeDialog">{{ $t('common.cancel') }}</Button>
-        <Button v-if="duplicate?.code === 'contact_exists_unassigned'" @click="saveContact(true)" :disabled="isSubmitting">
+        <Button v-if="duplicate?.code === 'contact_exists_unassigned' && !duplicate.blockedReason" @click="saveContact(true)" :disabled="isSubmitting">
           <Loader2 v-if="isSubmitting" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t('contacts.duplicateClaim') }}
         </Button>

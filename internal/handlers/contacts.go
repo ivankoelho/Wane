@@ -1538,32 +1538,75 @@ const (
 	claimFailed // database error
 )
 
-// claimExistingContact lets an agent take an existing unowned contact. It is
-// authorized exactly like the other ways of taking an attendance: with an
-// active queue attendance it follows PickNextTransfer (queue pickup enabled,
-// transfers:pickup, team membership, agent eligible) and claims it atomically;
-// with none it only sets the carteira, and only for a member of the contact's
-// team when it has one. Supervisors (transfers:write / conversations:view_all)
-// skip the team and pickup checks, as they do everywhere else.
-func (a *App) claimExistingContact(orgID, userID uuid.UUID, c *models.Contact, t *models.AgentTransfer) (claimResult, string) {
+// Stable codes for why an agent cannot take a contact. The client translates
+// them; the English text is only what a plain API caller sees.
+const (
+	claimBlockQueuePickupDisabled = "queue_pickup_disabled"
+	claimBlockPickupPermission    = "pickup_permission_required"
+	claimBlockNotTeamMember       = "not_team_member"
+	claimBlockAgentUnavailable    = "agent_unavailable"
+)
+
+var claimBlockMessages = map[string]string{
+	claimBlockQueuePickupDisabled: "Queue pickup is not allowed",
+	claimBlockPickupPermission:    "You don't have permission to pick up transfers",
+	claimBlockNotTeamMember:       "You are not a member of this team",
+	claimBlockAgentUnavailable:    "You must be active, available and connected to pick up transfers",
+}
+
+// claimBlockReason is the authorization half of a claim, free of side effects:
+// "" when userID may take the contact, otherwise one of the claimBlock* codes.
+// It follows PickNextTransfer: with an active queue attendance the org must
+// allow queue pickup, the caller needs transfers:pickup and membership of the
+// attendance's team, and must be eligible; with none, a contact that has a team
+// (its own or the account default) is only for that team's members.
+// Supervisors (transfers:write / conversations:view_all) skip the pickup and
+// team checks, as they do everywhere else.
+func (a *App) claimBlockReason(orgID, userID uuid.UUID, c *models.Contact, t *models.AgentTransfer) string {
 	supervisor := a.canOverrideConversationOwner(userID, orgID)
 
 	if t != nil {
 		if !supervisor {
 			settings, _ := a.getChatbotSettingsCached(orgID, "")
 			if settings != nil && !settings.AgentAssignment.AllowQueuePickup {
-				return claimForbidden, "Queue pickup is not allowed"
+				return claimBlockQueuePickupDisabled
 			}
 			if !a.HasPermission(userID, models.ResourceTransfers, models.ActionPickup, orgID) {
-				return claimForbidden, "You don't have permission to pick up transfers"
+				return claimBlockPickupPermission
 			}
 			if t.TeamID != nil && !a.userInTeam(userID, *t.TeamID) {
-				return claimForbidden, "You are not a member of this team"
+				return claimBlockNotTeamMember
 			}
 		}
 		if !a.isAgentEligible(orgID, userID) {
-			return claimForbidden, "You must be active, available and connected to pick up transfers"
+			return claimBlockAgentUnavailable
 		}
+		return ""
+	}
+
+	if !supervisor {
+		team := c.TeamID
+		if team == nil {
+			team = a.accountDefaultTeamID(orgID, c)
+		}
+		if team != nil && !a.userInTeam(userID, *team) {
+			return claimBlockNotTeamMember
+		}
+	}
+	return ""
+}
+
+// claimExistingContact lets an agent take an existing unowned contact, after
+// claimBlockReason allows it. With an active attendance it takes the attendance
+// with the shared atomic claim; with none it sets the carteira, also as a
+// compare-and-set. restore brings a soft-deleted contact back in the same step
+// that wins the claim, so a refused or lost claim never un-deletes anything.
+func (a *App) claimExistingContact(orgID, userID uuid.UUID, c *models.Contact, t *models.AgentTransfer, restore bool) (claimResult, string) {
+	if reason := a.claimBlockReason(orgID, userID, c, t); reason != "" {
+		return claimForbidden, reason
+	}
+
+	if t != nil {
 		claimed, err := a.claimTransfer(a.DB, t, userID)
 		if err != nil {
 			a.Log.Error("Failed to claim contact attendance", "error", err, "transfer_id", t.ID)
@@ -1576,21 +1619,22 @@ func (a *App) claimExistingContact(orgID, userID uuid.UUID, c *models.Contact, t
 		a.auditDistribution(orgID, &userID, t.ID, distEventClaimed, nil, &userID, "claimed from the add-contact dialog")
 		a.pinCarteiraOnClaim(c, userID)
 		a.broadcastTransferAssigned(t)
+		if restore {
+			if err := a.DB.Unscoped().Model(c).Update("deleted_at", nil).Error; err != nil {
+				a.Log.Error("Failed to restore claimed contact", "error", err, "contact_id", c.ID)
+				return claimFailed, ""
+			}
+		}
 		return claimOK, ""
 	}
 
-	if !supervisor {
-		team := c.TeamID
-		if team == nil {
-			team = a.accountDefaultTeamID(orgID, c)
-		}
-		if team != nil && !a.userInTeam(userID, *team) {
-			return claimForbidden, "You are not a member of this team"
-		}
+	updates := map[string]any{"assigned_user_id": userID}
+	if restore {
+		updates["deleted_at"] = nil
 	}
-	res := a.DB.Model(&models.Contact{}).
+	res := a.DB.Unscoped().Model(&models.Contact{}).
 		Where("id = ? AND organization_id = ? AND assigned_user_id IS NULL", c.ID, orgID).
-		Update("assigned_user_id", userID)
+		Updates(updates)
 	if res.Error != nil {
 		a.Log.Error("Failed to claim contact", "error", res.Error, "contact_id", c.ID)
 		return claimFailed, ""
@@ -1653,38 +1697,46 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 	found, findErr := contactutil.FindContactUnscoped(a.DB, orgID, req.PhoneNumber)
 	if findErr == nil {
 		existingContact := *found
-		restored := false
-		if existingContact.DeletedAt.Valid {
-			// Restore soft-deleted contact
-			a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil)
+		// Authorization comes before anything is written, restoring a
+		// soft-deleted contact included: a contact held by someone else is
+		// reported as such and left exactly as it is, and an unowned one needs
+		// the same confirmed, rule-checked claim as a live one.
+		deleted := existingContact.DeletedAt.Valid
+		owner, attendance := a.currentContactOwner(orgID, &existingContact)
+		ownDeleted := deleted && owner != nil && *owner == userID
+		if owner != nil && !ownDeleted {
+			return a.sendContactExistsAssigned(r, orgID, userID, &existingContact, *owner)
+		}
+		switch {
+		case ownDeleted:
+			// Your own contact, deleted: bringing it back needs no claim.
+			if err := a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil).Error; err != nil {
+				a.Log.Error("Failed to restore contact", "error", err)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to restore contact", nil, "")
+			}
 			existingContact.DeletedAt.Valid = false
-			restored = true
-		} else {
-			// Who holds it right now: the agent of an active attendance, else
-			// the carteira owner. Say whose it is -- the agent can't find it in
-			// their own (visibility-scoped) search, so a bare "already exists"
-			// leaves them with nobody to ask.
-			owner, attendance := a.currentContactOwner(orgID, &existingContact)
-			if owner != nil {
-				return a.sendContactExistsAssigned(r, orgID, userID, &existingContact, *owner)
-			}
-			if !req.Claim {
-				// Existing but unassigned (main queue). FindContactUnscoped bypasses
-				// conversation-visibility scoping on purpose (dedup must see every
-				// spelling of a phone number), but ListContacts' search does not, so
-				// the agent can't see it and believes it is new. Taking it silently
-				// pulls it out of the queue, so ask first; the client resends with
-				// claim=true once the agent confirms.
-				return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists in the main queue", map[string]any{
-					"code":         contactExistsUnassigned,
-					"contact_name": existingContact.ProfileName,
-				}, "")
-			}
+		case !req.Claim:
+			// Existing but unassigned (main queue). FindContactUnscoped bypasses
+			// conversation-visibility scoping on purpose (dedup must see every
+			// spelling of a phone number), but ListContacts search does not, so
+			// the agent cannot see it and believes it is new. Taking it silently
+			// pulls it out of the queue, so ask first; the client resends with
+			// claim=true once the agent confirms. When the agent could not take
+			// it anyway, say why now instead of offering a doomed action.
+			blocked := a.claimBlockReason(orgID, userID, &existingContact, attendance)
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists in the main queue", map[string]any{
+				"code":                 contactExistsUnassigned,
+				"contact_name":         existingContact.ProfileName,
+				"deleted":              deleted,
+				"can_claim":            blocked == "",
+				"claim_blocked_reason": blocked,
+			}, "")
+		default:
 			// claim=true is only a request: the same rules as picking from the
 			// queue still apply, and the claim itself is a compare-and-set.
-			switch res, msg := a.claimExistingContact(orgID, userID, &existingContact, attendance); res {
+			switch res, reason := a.claimExistingContact(orgID, userID, &existingContact, attendance, deleted); res {
 			case claimForbidden:
-				return r.SendErrorEnvelope(fasthttp.StatusForbidden, msg, nil, "")
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, claimBlockMessages[reason], map[string]any{"code": reason}, "")
 			case claimLost:
 				if owner, _ := a.currentContactOwner(orgID, &existingContact); owner != nil {
 					return a.sendContactExistsAssigned(r, orgID, userID, &existingContact, *owner)
@@ -1693,6 +1745,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			case claimFailed:
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim contact", nil, "")
 			}
+			existingContact.DeletedAt.Valid = false
 		}
 		updates := map[string]any{}
 		if req.ProfileName != "" {
@@ -1723,9 +1776,6 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		}
 		if req.Metadata != nil {
 			updates["metadata"] = models.JSONB(req.Metadata)
-		}
-		if restored && existingContact.AssignedUserID == nil {
-			updates["assigned_user_id"] = userID
 		}
 		if len(updates) > 0 {
 			if err := a.DB.Model(&existingContact).Updates(updates).Error; err != nil {

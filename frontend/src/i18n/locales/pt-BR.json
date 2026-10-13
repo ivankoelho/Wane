@@ -560,6 +560,15 @@
     "duplicateUnknownOwner": "outro usuário",
     "duplicateClaim": "Assumir contato",
     "claimedSuccess": "Contato assumido. Ele agora está na sua lista.",
+    "duplicateDeleted": "{name} foi excluído antes. Deseja restaurá-lo e assumir como seu?",
+    "duplicateBlocked": "{name} já existe na fila principal, mas você não pode assumi-lo.",
+    "claimBlocked": {
+      "queue_pickup_disabled": "A retirada de contatos da fila está desativada nesta organização. Peça a um supervisor.",
+      "pickup_permission_required": "Seu perfil não inclui retirar contatos da fila. Peça a um supervisor.",
+      "not_team_member": "Ele pertence a uma equipe da qual você não faz parte. Peça a alguém dessa equipe ou a um supervisor.",
+      "agent_unavailable": "Você precisa estar ativo, disponível e conectado para assumi-lo.",
+      "unknown": "Peça a um supervisor para atribuí-lo a você."
+    },
     "phonePlaceholder": "5511987654321",
     "phoneHint": "Insira o número com código do país (sem +)",
     "namePlaceholder": "João da Silva",

@@ -264,3 +264,12 @@ func errorData(req *fastglue.Request) map[string]any {
 	_ = json.Unmarshal(testutil.GetResponseBody(req), &env)
 	return env.Data
 }
+
+// createWith posts an arbitrary body as userID.
+func (e *claimEnv) createWith(t *testing.T, userID uuid.UUID, body map[string]any) claimReply {
+	t.Helper()
+	req := testutil.NewJSONRequest(t, body)
+	testutil.SetAuthContext(req, e.org.ID, userID)
+	_ = e.app.CreateContact(req)
+	return claimReply{status: testutil.GetResponseStatusCode(req), data: errorData(req)}
+}

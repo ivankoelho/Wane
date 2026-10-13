@@ -573,6 +573,15 @@
     "duplicateUnknownOwner": "another user",
     "duplicateClaim": "Take this contact",
     "claimedSuccess": "Contact taken. It is now in your list.",
+    "duplicateDeleted": "{name} was deleted earlier. Restore it and take it as yours?",
+    "duplicateBlocked": "{name} already exists in the main queue, but you cannot take it.",
+    "claimBlocked": {
+      "queue_pickup_disabled": "Taking contacts from the queue is turned off for this organization. Ask a supervisor.",
+      "pickup_permission_required": "Your profile does not include taking contacts from the queue. Ask a supervisor.",
+      "not_team_member": "It belongs to a team you are not a member of. Ask someone on that team or a supervisor.",
+      "agent_unavailable": "You need to be active, available and connected to take it.",
+      "unknown": "Ask a supervisor to assign it to you."
+    },
     "phonePlaceholder": "919876543210",
     "phoneHint": "Enter phone number with country code (without +)",
     "namePlaceholder": "John Doe",
