@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { salesOpportunitiesService } from '@/services/api'
 import type { SalesOpportunity } from '@/services/api'
 import { SALES_UNITS, parseDecimalInput } from '@/lib/salesUnits'
+import { formatMoneyInput } from '@/lib/currency'
+import MoneyInput from '@/components/sales/MoneyInput.vue'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Loader2 } from 'lucide-vue-next'
 
@@ -37,9 +39,9 @@ watch(() => props.open, isOpen => {
   if (!isOpen) return
   const o = props.opportunity
   estimatedQuantity.value = o.estimated_quantity != null ? String(o.estimated_quantity) : ''
-  estimatedValue.value = o.estimated_value != null ? String(o.estimated_value) : ''
+  estimatedValue.value = formatMoneyInput(o.estimated_value)
   unit.value = o.unit_of_measure || NONE
-  realizedValue.value = o.realized_value != null ? String(o.realized_value) : ''
+  realizedValue.value = formatMoneyInput(o.realized_value)
   realizedQuantity.value = o.realized_quantity != null ? String(o.realized_quantity) : ''
 })
 
@@ -114,14 +116,14 @@ async function save() {
         </div>
         <div class="space-y-2">
           <Label>{{ $t('sales.columnEstimatedValue') }}</Label>
-          <Input v-model="estimatedValue" type="text" inputmode="decimal" :placeholder="$t('sales.estimatedValuePlaceholder')" />
+          <MoneyInput v-model="estimatedValue" :placeholder="$t('sales.estimatedValuePlaceholder')" />
         </div>
       </div>
 
       <div v-else class="space-y-4 py-4">
         <div class="space-y-2">
           <Label>{{ $t('sales.realizedValue') }}</Label>
-          <Input v-model="realizedValue" data-testid="sales-details-realized-value" type="text" inputmode="decimal" placeholder="0,00" />
+          <MoneyInput v-model="realizedValue" data-testid="sales-details-realized-value" placeholder="0,00" />
           <p v-if="opportunity.conversion_source === 'xprocess'" class="text-[11px] text-muted-foreground">
             {{ $t('sales.realizedValueX2Note') }}
           </p>

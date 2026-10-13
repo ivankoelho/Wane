@@ -3788,7 +3788,7 @@
     "createDialogDesc": "Creates a sales opportunity linked to this contact, using the same fields the chatbot flow uses.",
     "interest": "Interest",
     "interestPlaceholder": "What is the customer looking for?",
-    "estimatedValuePlaceholder": "E.g.: 3500.00",
+    "estimatedValuePlaceholder": "3500.00",
     "opportunityCreated": "Opportunity created",
     "opportunityCreateFailed": "Failed to create opportunity",
     "conversionRecorded": "Opportunity marked as converted",
