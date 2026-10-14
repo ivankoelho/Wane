@@ -157,7 +157,7 @@ onMounted(async () => {
     />
 
     <!-- Board: the Kanban takes the whole area, no card behind it. -->
-    <div v-else-if="mode === 'board'" class="h-full overflow-y-auto">
+    <div v-else-if="mode === 'board'" class="h-full">
       <OccurrenceBoard :protocol="searchQuery || undefined" />
     </div>
 

@@ -254,12 +254,14 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
 </script>
 
 <template>
-  <div id="occurrences-board" class="flex gap-3 overflow-x-auto p-4">
+  <!-- Fills its container's height; each column scrolls on its own (same as
+       the CRM board), so short columns don't stretch to the longest one. -->
+  <div id="occurrences-board" class="flex h-full gap-3 overflow-x-auto p-4">
     <div
       v-for="col in columns"
       :key="col.stage.id"
       :data-board-column="col.stage.name"
-      class="flex w-[288px] shrink-0 flex-col gap-2"
+      class="flex min-h-0 w-[288px] shrink-0 flex-col gap-2"
     >
       <!-- Stage band (Bitrix's coloured column header): a tint of the stage
            colour with a solid underline, so any stage colour stays legible
@@ -281,7 +283,7 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
         >{{ col.total }}</span>
       </div>
 
-      <div class="flex flex-1 flex-col gap-2 rounded-xl bg-muted/50 p-2 min-h-24">
+      <div class="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-muted/50 p-2">
         <div v-if="col.failed" class="p-3 text-center">
           <p class="text-xs text-muted-foreground">{{ $t('occurrences.columnLoadFailed') }}</p>
           <Button variant="outline" size="sm" class="mt-2" @click="loadColumn(col, 1)">
@@ -304,15 +306,17 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
             <template #item="{ element }">
               <OccurrenceCard :occurrence="element" :disabled="pending.has(element.id)" @click="goToDetail(element)" />
             </template>
+            <!-- Inside the drop zone and centred (my-auto in a flex column), so an
+                 empty column reads clearly and still takes a drop anywhere. -->
+            <template #footer>
+              <div v-if="col.loading" class="my-auto flex justify-center p-3">
+                <Spinner class="h-4 w-4" />
+              </div>
+              <p v-else-if="col.items.length === 0" class="my-auto p-3 text-center text-xs text-muted-foreground">
+                {{ $t('occurrences.columnEmpty') }}
+              </p>
+            </template>
           </draggable>
-
-          <div v-if="col.loading" class="flex justify-center p-3">
-            <Spinner class="h-4 w-4" />
-          </div>
-
-          <p v-else-if="col.items.length === 0" class="p-3 text-center text-xs text-muted-foreground">
-            {{ $t('occurrences.columnEmpty') }}
-          </p>
 
           <Button
             v-if="hasMore(col) && !col.loading"

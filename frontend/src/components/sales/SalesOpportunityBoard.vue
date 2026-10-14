@@ -279,11 +279,12 @@ defineExpose({ refresh: loadAll })
                 @details-change="onDetailsChange"
               />
             </template>
+            <!-- my-auto centres the state in the empty column (it is a flex column) -->
             <template #footer>
-              <div v-if="loading" class="flex justify-center p-3">
+              <div v-if="loading" class="my-auto flex justify-center p-3">
                 <Spinner class="h-4 w-4" />
               </div>
-              <p v-else-if="col.items.length === 0" class="p-3 text-center text-xs text-muted-foreground">
+              <p v-else-if="col.items.length === 0" class="my-auto p-3 text-center text-xs text-muted-foreground">
                 {{ $t('sales.columnEmpty') }}
               </p>
             </template>
