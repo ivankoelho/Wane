@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { salesOpportunitiesService } from '@/services/api'
 import type { SalesOpportunity, SalesOpportunityStage } from '@/services/api'
 import SalesOpportunityCard from './SalesOpportunityCard.vue'
+import { byOpenedAtDesc, cardOrder, placePreview } from '@/lib/board-order'
 
 // Manual filters from the sales screen (seller / store). The backend already
 // scopes every request to what the user may see (own / team / all).
@@ -130,11 +131,18 @@ function onDragStart(col: ColumnState, evt: { oldIndex: number }) {
   dragOrigin = item ? { opportunityId: item.id, fromKey: col.key } : null
 }
 
-function canMove(evt: { draggedContext: { element: SalesOpportunity } }): boolean {
-  return !pending.value.has(evt.draggedContext.element.id)
+// Também posiciona o espaço do cartão onde ele vai cair (opened_at DESC, a
+// mesma ordem aplicada ao soltar), para ele não pular depois.
+function canMove(evt: { draggedContext: { element: SalesOpportunity }; relatedContext?: { list?: SalesOpportunity[] }; dragged?: HTMLElement }): boolean {
+  if (pending.value.has(evt.draggedContext.element.id)) return false
+  if (evt.relatedContext?.list) placePreview(evt.dragged, evt.relatedContext.list, evt.draggedContext.element)
+  return true
 }
 
 async function onColumnChange(toCol: ColumnState, evt: { added?: { element: SalesOpportunity } }) {
+  // A ordem nunca é manual: a coluna volta a opened_at DESC (onde a prévia
+  // do arrasto mostrou que o cartão ia cair).
+  toCol.items.sort(byOpenedAtDesc)
   if (!evt.added) return // reordenar dentro da mesma coluna não muda nada no servidor
 
   const origin = dragOrigin
@@ -156,6 +164,7 @@ async function onColumnChange(toCol: ColumnState, evt: { added?: { element: Sale
     const idx = toCol.items.findIndex(i => i.id === opp.id)
     if (idx !== -1) toCol.items.splice(idx, 1)
     if (fromCol) fromCol.items.push(opp)
+    fromCol?.items.sort(byOpenedAtDesc)
     if (toCol.key === 'convertida') emit('convert', opp)
     else emit('lose', opp)
     return
@@ -174,6 +183,7 @@ async function onColumnChange(toCol: ColumnState, evt: { added?: { element: Sale
     const idx = toCol.items.findIndex(i => i.id === opp.id)
     if (idx !== -1) toCol.items.splice(idx, 1)
     if (fromCol) fromCol.items.push(opp)
+    fromCol?.items.sort(byOpenedAtDesc)
 
     // Entrar em "direcionada" sem direcionamento é a única falha de validação
     // realista neste board (etapa e status já são controlados pelo próprio
@@ -269,8 +279,9 @@ defineExpose({ refresh: loadAll })
             @change="onColumnChange(col, $event)"
             @end="dragOrigin = null"
           >
-            <template #item="{ element }">
+            <template #item="{ element, index }">
               <SalesOpportunityCard
+                :style="{ order: cardOrder(index) }"
                 :opportunity="element"
                 :disabled="pending.has(element.id)"
                 @convert="emit('convert', $event)"
@@ -281,10 +292,10 @@ defineExpose({ refresh: loadAll })
             </template>
             <!-- my-auto centres the state in the empty column (it is a flex column) -->
             <template #footer>
-              <div v-if="loading" class="my-auto flex justify-center p-3">
+              <div v-if="loading" class="order-last my-auto flex justify-center p-3">
                 <Spinner class="h-4 w-4" />
               </div>
-              <p v-else-if="col.items.length === 0" class="my-auto p-3 text-center text-xs text-muted-foreground">
+              <p v-else-if="col.items.length === 0" class="order-last my-auto p-3 text-center text-xs text-muted-foreground">
                 {{ $t('sales.columnEmpty') }}
               </p>
             </template>

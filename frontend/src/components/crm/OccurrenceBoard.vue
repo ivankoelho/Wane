@@ -12,6 +12,7 @@ import { useOccurrencesStore } from '@/stores/occurrences'
 import { wsService } from '@/services/websocket'
 import type { Occurrence, OccurrenceStage } from '@/services/api'
 import OccurrenceCard from './OccurrenceCard.vue'
+import { byOpenedAtDesc, cardOrder, placePreview } from '@/lib/board-order'
 
 const props = defineProps<{ protocol?: string }>()
 
@@ -176,13 +177,17 @@ function onDragStart(col: ColumnState, evt: { oldIndex: number }) {
   dragOrigin = item ? { occurrenceId: item.id, fromStageId: col.stage.id } : null
 }
 
-/** Recusa arrastar um cartão cuja própria requisição ainda está em voo. */
-function canMove(evt: { draggedContext: { element: Occurrence } }): boolean {
-  return !pending.value.has(evt.draggedContext.element.id)
+/** Recusa arrastar um cartão cuja própria requisição ainda está em voo, e
+ * mostra o espaço do cartão já no lugar onde ele vai cair (opened_at DESC),
+ * em vez de sob o ponteiro — senão ele pula ao soltar. */
+function canMove(evt: { draggedContext: { element: Occurrence }; relatedContext?: { list?: Occurrence[] }; dragged?: HTMLElement }): boolean {
+  if (pending.value.has(evt.draggedContext.element.id)) return false
+  if (evt.relatedContext?.list) placePreview(evt.dragged, evt.relatedContext.list, evt.draggedContext.element)
+  return true
 }
 
 function sortByOpenedAtDesc(items: Occurrence[]) {
-  items.sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at))
+  items.sort(byOpenedAtDesc)
 }
 
 async function onColumnChange(toCol: ColumnState, evt: { added?: { element: Occurrence } }) {
@@ -303,16 +308,16 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
             @change="onColumnChange(col, $event)"
             @end="dragOrigin = null"
           >
-            <template #item="{ element }">
-              <OccurrenceCard :occurrence="element" :disabled="pending.has(element.id)" @click="goToDetail(element)" />
+            <template #item="{ element, index }">
+              <OccurrenceCard :style="{ order: cardOrder(index) }" :occurrence="element" :disabled="pending.has(element.id)" @click="goToDetail(element)" />
             </template>
             <!-- Inside the drop zone and centred (my-auto in a flex column), so an
                  empty column reads clearly and still takes a drop anywhere. -->
             <template #footer>
-              <div v-if="col.loading" class="my-auto flex justify-center p-3">
+              <div v-if="col.loading" class="order-last my-auto flex justify-center p-3">
                 <Spinner class="h-4 w-4" />
               </div>
-              <p v-else-if="col.items.length === 0" class="my-auto p-3 text-center text-xs text-muted-foreground">
+              <p v-else-if="col.items.length === 0" class="order-last my-auto p-3 text-center text-xs text-muted-foreground">
                 {{ $t('occurrences.columnEmpty') }}
               </p>
             </template>
