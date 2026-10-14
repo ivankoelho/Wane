@@ -42,7 +42,8 @@ func (a *App) setAuthCookies(r *fastglue.Request, accessToken, refreshToken stri
 	rc.SetHTTPOnly(true)
 	rc.SetSecure(secure)
 	rc.SetSameSite(fasthttp.CookieSameSiteLaxMode)
-	rc.SetPath(bp + "/api/auth/refresh")
+	// /api/auth covers both /refresh and /logout, so logout can revoke it.
+	rc.SetPath(bp + "/api/auth")
 	rc.SetMaxAge(a.Config.JWT.RefreshExpiryDays * 86400)
 	if domain != "" {
 		rc.SetDomain(domain)
@@ -84,7 +85,7 @@ func (a *App) clearAuthCookies(r *fastglue.Request) {
 		case cookieAccessName:
 			c.SetPath(bp + "/api")
 		case cookieRefreshName:
-			c.SetPath(bp + "/api/auth/refresh")
+			c.SetPath(bp + "/api/auth")
 		default:
 			c.SetPath(bp + "/")
 		}
@@ -104,3 +105,4 @@ func generateCSRFToken() string {
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
+

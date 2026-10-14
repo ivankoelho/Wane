@@ -262,7 +262,7 @@ func TestApp_RefreshToken_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("refresh")), testutil.WithPassword("password123"))
-	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	refreshToken := issueRefreshToken(t, app, user)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": refreshToken,
@@ -328,7 +328,7 @@ func TestApp_RefreshToken_UserNotFound(t *testing.T) {
 		OrganizationID: uuid.New(),
 		Email:          "fake@example.com",
 	}
-	token := testutil.GenerateTestRefreshToken(t, fakeUser, testutil.TestJWTSecret, 7*24*time.Hour)
+	token := issueRefreshToken(t, app, fakeUser)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,
@@ -343,7 +343,7 @@ func TestApp_RefreshToken_DisabledUser(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("disabled")), testutil.WithPassword("password123"), testutil.WithInactive())
-	token := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	token := issueRefreshToken(t, app, user)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,

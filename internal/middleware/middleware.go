@@ -166,7 +166,7 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		// Parse and validate token
 		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (any, error) {
 			return []byte(secret), nil
-		})
+		}, jwt.WithValidMethods([]string{"HS256"}))
 
 		if err != nil || !token.Valid {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
@@ -176,6 +176,12 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		claims, ok := token.Claims.(*JWTClaims)
 		if !ok {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
+			return nil
+		}
+		// Only access tokens authenticate API requests: refresh tokens carry a
+		// jti, WebSocket tickets carry Subject "ws".
+		if claims.ID != "" || claims.Subject == "ws" {
+			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token type", nil, "")
 			return nil
 		}
 

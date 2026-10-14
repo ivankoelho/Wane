@@ -280,7 +280,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	// Parse and validate refresh token
 	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
 		return []byte(a.Config.JWT.Secret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 
 	if err != nil || !token.Valid {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
@@ -291,8 +291,13 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 	}
 
+	// Only refresh tokens carry a jti: an access or WS token is not a refresh
+	// token and must not mint a session (audit run-1 token-type confusion).
+	if claims.ID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+	}
 	// Validate JTI in Redis (single-use: delete on consumption)
-	if claims.ID != "" {
+	{
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		deleted, err := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
@@ -517,7 +522,7 @@ func (a *App) Logout(r *fastglue.Request) error {
 		// Parse the token to extract JTI (don't need to fully validate — just extract claims)
 		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
 			return []byte(a.Config.JWT.Secret), nil
-		})
+		}, jwt.WithValidMethods([]string{"HS256"}))
 		if token != nil {
 			if claims, ok := token.Claims.(*middleware.JWTClaims); ok && claims.ID != "" {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

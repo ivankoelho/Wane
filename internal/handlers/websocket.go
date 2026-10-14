@@ -59,7 +59,7 @@ func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 	return func(tokenString string) (uuid.UUID, uuid.UUID, error) {
 		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
 			return []byte(a.Config.JWT.Secret), nil
-		})
+		}, jwt.WithValidMethods([]string{"HS256"}))
 
 		if err != nil || !token.Valid {
 			return uuid.Nil, uuid.Nil, err
@@ -67,6 +67,9 @@ func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 
 		claims, ok := token.Claims.(*middleware.JWTClaims)
 		if !ok {
+			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
+		}
+		if claims.ID != "" { // refresh tokens never open a WebSocket
 			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
 		}
 

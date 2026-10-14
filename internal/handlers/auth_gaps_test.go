@@ -392,3 +392,14 @@ func TestApp_GetWSToken_UsesActiveOrgFromHeader(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req2), &resp))
 	assert.Equal(t, homeOrg.ID, parseAccessClaims(t, resp.Data.Token).OrganizationID)
 }
+
+// issueRefreshToken returns a refresh JWT whose JTI is live in Redis, the way
+// generateRefreshToken issues them: a refresh token without a JTI is rejected.
+func issueRefreshToken(t *testing.T, app *handlers.App, user *models.User) string {
+	t.Helper()
+	jti := uuid.New().String()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Redis.Set(ctx, "refresh:"+jti, user.ID.String(), time.Hour).Err())
+	return generateRefreshTokenWithJTI(t, testutil.TestJWTSecret, user, jti, 7*24*time.Hour)
+}
