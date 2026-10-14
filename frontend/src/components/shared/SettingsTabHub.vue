@@ -66,9 +66,6 @@ function onTabChange(value: string | number) {
   <div v-if="visibleTabs.length === 0" class="p-6 text-sm text-white/50 light:text-gray-500">
     {{ t('common.noAccessToSection') }}
   </div>
-  <!-- Bitrix-style vertical icon rail on the left; the active tab gets what is
-       left, so each settings page keeps its own scroll area (they are all
-       h-full + ScrollArea). -->
   <Tabs
     v-else
     :model-value="activeTab ?? undefined"
@@ -76,6 +73,12 @@ function onTabChange(value: string | number) {
     class="flex h-full min-h-0 w-full"
     @update:model-value="onTabChange"
   >
+    <!-- Bitrix-style vertical icon rail on the left; the active tab gets what is
+         left, so each settings page keeps its own scroll area (they are all
+         h-full + ScrollArea). -->
+    <!-- No comment may sit between the root v-if and v-else: in dev builds Vue
+         attaches it to the v-else branch, the root becomes a fragment, and the
+         page <Transition mode="out-in"> never finishes leaving (blank page). -->
     <TabsList class="page-rail">
       <TabsTrigger
         v-for="tab in visibleTabs"

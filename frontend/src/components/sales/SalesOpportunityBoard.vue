@@ -258,7 +258,9 @@ defineExpose({ refresh: loadAll })
 
         <!-- Column fills the board's height with its own scrollbar — the board
              (and the page around it) never grows with the column's content. -->
-        <div class="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-muted/50 p-2">
+        <!-- The drop zone fills the column body (padding inside it, "load more"
+             in its footer), so a drop anywhere in the column counts. -->
+        <div class="flex min-h-24 flex-1 flex-col overflow-y-auto rounded-xl bg-muted/50">
           <!-- flex-1 so the drop target always fills the column's free
                height, even with 0 items — it used to collapse to 0px tall
                when empty (a bare v-for renders no natural height), leaving
@@ -274,7 +276,7 @@ defineExpose({ refresh: loadAll })
             :disabled="col.key === 'convertida' || col.key === 'perdida'"
             item-key="id"
             data-board-dropzone
-            class="flex flex-1 flex-col gap-2"
+            class="flex flex-1 flex-col gap-2 p-2"
             @start="onDragStart(col, $event)"
             @change="onColumnChange(col, $event)"
             @end="dragOrigin = null"
@@ -298,21 +300,21 @@ defineExpose({ refresh: loadAll })
               <p v-else-if="col.items.length === 0" class="order-last my-auto p-3 text-center text-xs text-muted-foreground">
                 {{ $t('sales.columnEmpty') }}
               </p>
+              <Button
+                v-if="col.hasMore"
+                data-board-load-more
+                variant="ghost"
+                size="sm"
+                class="order-last w-full shrink-0 text-xs"
+                :disabled="col.loadingMore"
+                @click="loadMore(col)"
+              >
+                <Spinner v-if="col.loadingMore" class="h-3 w-3 mr-1.5" />
+                {{ $t('sales.loadMore') }} ({{ col.total - col.items.length }})
+              </Button>
             </template>
           </draggable>
 
-          <Button
-            v-if="col.hasMore"
-            data-board-load-more
-            variant="ghost"
-            size="sm"
-            class="w-full text-xs shrink-0"
-            :disabled="col.loadingMore"
-            @click="loadMore(col)"
-          >
-            <Spinner v-if="col.loadingMore" class="h-3 w-3 mr-1.5" />
-            {{ $t('sales.loadMore') }} ({{ col.total - col.items.length }})
-          </Button>
         </div>
       </div>
     </template>

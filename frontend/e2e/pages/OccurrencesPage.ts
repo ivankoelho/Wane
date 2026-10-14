@@ -110,6 +110,9 @@ export class OccurrencesPage extends BasePage {
 
     if (opts.atBottom) {
       const existing = column.locator('[data-board-card]')
+      // A coluna rola por dentro: traz o último cartão para a vista antes de
+      // medir, como uma pessoa faria, para soltar logo abaixo dele.
+      if ((await existing.count()) > 0) await existing.last().scrollIntoViewIfNeeded()
       const lastBox = (await existing.count()) > 0 ? await existing.last().boundingBox() : null
       if (lastBox) {
         // O ponto bruto (logo abaixo do último cartão) ainda mira a coluna,

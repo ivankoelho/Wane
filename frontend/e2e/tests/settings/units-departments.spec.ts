@@ -183,8 +183,8 @@ test.describe('Departments tab: permissions', () => {
 
   test('read-only user sees the list but no create/edit/delete controls, and only the Departments tab', async ({ page }) => {
     await loginAs(page, readerUser)
-    await page.goto('/settings')
-    await expect(page).toHaveURL(/\/settings\?tab=departments/)
+    await page.goto('/settings') // no settings.general: sent to People & access
+    await expect(page).toHaveURL(/\/settings\/access\?tab=departments/)
     await expect(page.getByRole('tab')).toHaveCount(1)
     await expect(page.getByTestId('department-add')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Edit department' })).toHaveCount(0)

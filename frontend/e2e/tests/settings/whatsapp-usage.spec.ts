@@ -88,8 +88,10 @@ test.describe('WhatsApp consumption', () => {
     await page.waitForLoadState('networkidle')
     await page.locator('header a[href="/chat/usage"]').click()
     await expect(page).toHaveURL(/\/chat\/usage/)
-    await expect(page.getByRole('tab').first()).toBeVisible()
-    expect(await page.getByRole('tab').count()).toBe(2)
+    // Scoped to the usage hub's own rail (the chat page's status tabs may
+    // still be leaving during the page transition) and auto-waiting.
+    const rail = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: /Consumption/ }) })
+    await expect(rail.getByRole('tab')).toHaveCount(2)
   })
 
   test('registers a price in the price table, and refuses an overlapping period', async ({ page }) => {

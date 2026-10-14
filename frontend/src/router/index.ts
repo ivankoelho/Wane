@@ -210,10 +210,17 @@ const router = createRouter({
           component: () => import('@/views/settings/SettingsView.vue'),
           // Geral | Notificações | Chamadas (settings.general). Unidades/Departamentos moved to
           // the access hub; old ?tab= links follow them.
-          meta: { anyPermission: ['settings.general'] },
-          beforeEnter: (to) => (to.query.tab === 'units' || to.query.tab === 'departments'
-            ? { path: '/settings/access', query: { tab: to.query.tab }, replace: true }
-            : true)
+          // units/departments stay in anyPermission so someone with only those (no
+          // settings.general) still reaches this route and gets sent to their new home.
+          meta: { anyPermission: ['settings.general', 'units', 'departments'] },
+          beforeEnter: (to) => {
+            if (to.query.tab === 'units' || to.query.tab === 'departments') {
+              return { path: '/settings/access', query: { tab: to.query.tab }, replace: true }
+            }
+            return useAuthStore().hasPermission('settings.general', 'read')
+              ? true
+              : { path: '/settings/access', replace: true }
+          }
         },
         {
           path: 'settings/service',

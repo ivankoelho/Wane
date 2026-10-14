@@ -288,8 +288,10 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
         >{{ col.total }}</span>
       </div>
 
-      <div class="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-muted/50 p-2">
-        <div v-if="col.failed" class="p-3 text-center">
+      <!-- The drop zone fills the column body (padding lives inside it and
+           "load more" sits in its footer), so a drop anywhere in the column counts. -->
+      <div class="flex min-h-24 flex-1 flex-col overflow-y-auto rounded-xl bg-muted/50">
+        <div v-if="col.failed" class="p-5 text-center">
           <p class="text-xs text-muted-foreground">{{ $t('occurrences.columnLoadFailed') }}</p>
           <Button variant="outline" size="sm" class="mt-2" @click="loadColumn(col, 1)">
             {{ $t('common.retryLoad') }}
@@ -303,7 +305,7 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
             :move="canMove"
             item-key="id"
             data-board-dropzone
-            class="flex flex-1 flex-col gap-2 min-h-16"
+            class="flex min-h-16 flex-1 flex-col gap-2 p-2"
             @start="onDragStart(col, $event)"
             @change="onColumnChange(col, $event)"
             @end="dragOrigin = null"
@@ -320,17 +322,17 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
               <p v-else-if="col.items.length === 0" class="order-last my-auto p-3 text-center text-xs text-muted-foreground">
                 {{ $t('occurrences.columnEmpty') }}
               </p>
+              <Button
+                v-if="hasMore(col) && !col.loading"
+                variant="ghost"
+                size="sm"
+                class="order-last shrink-0"
+                @click="loadColumn(col, col.page + 1)"
+              >
+                {{ $t('occurrences.loadMore') }}
+              </Button>
             </template>
           </draggable>
-
-          <Button
-            v-if="hasMore(col) && !col.loading"
-            variant="ghost"
-            size="sm"
-            @click="loadColumn(col, col.page + 1)"
-          >
-            {{ $t('occurrences.loadMore') }}
-          </Button>
         </template>
       </div>
     </div>
