@@ -101,13 +101,16 @@ async function saveValue() {
 </script>
 
 <template>
-  <!-- Contact-first card, same layout as the CRM board's OccurrenceCard: who
-       on top, the deal and its actions in the middle, seller + date below. -->
   <div
     data-board-card
     class="rounded-xl bg-card p-3 shadow-sm ring-1 ring-black/[0.05] transition-shadow hover:shadow-md dark:ring-white/[0.07]"
     :class="disabled ? 'opacity-50 cursor-wait' : 'cursor-grab active:cursor-grabbing'"
   >
+    <!-- Contact-first card, same layout as the CRM board's OccurrenceCard: who
+         on top, the deal and its actions in the middle, seller + date below. -->
+    <!-- Single root element on purpose: vuedraggable maps each item through
+         the component's root node, so nothing (not even a comment) may sit
+         beside it, or dragging breaks. -->
     <div class="flex items-start gap-2.5">
       <Avatar class="h-9 w-9 shrink-0">
         <AvatarFallback :class="'bg-gradient-to-br text-xs font-semibold text-white ' + getAvatarGradient(contactName)">

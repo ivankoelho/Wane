@@ -38,14 +38,17 @@ const openedAt = computed(() => {
 </script>
 
 <template>
-  <!-- Contact-first card (Bitrix/Kommo deal card): who it is on top, what it
-       is in the middle, who owns it and when at the bottom. The column header
-       carries the stage colour, so the card itself stays neutral. -->
   <div
     data-board-card
     class="group rounded-xl bg-card p-3 shadow-sm ring-1 ring-black/[0.05] transition-shadow hover:shadow-md dark:ring-white/[0.07]"
     :class="disabled ? 'opacity-50 cursor-wait' : 'cursor-grab active:cursor-grabbing'"
   >
+    <!-- Contact-first card (Bitrix/Kommo deal card): who it is on top, what it
+         is in the middle, who owns it and when at the bottom. The column header
+         carries the stage colour, so the card itself stays neutral. -->
+    <!-- Single root element on purpose: vuedraggable maps each item through
+         the component's root node, so nothing (not even a comment) may sit
+         beside it, or dragging breaks. -->
     <div class="flex items-start gap-2.5">
       <Avatar class="h-9 w-9 shrink-0">
         <AvatarFallback :class="'bg-gradient-to-br text-xs font-semibold text-white ' + getAvatarGradient(contactName)">
