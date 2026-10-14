@@ -787,6 +787,8 @@ export const brandingService = {
     system_name: string | null
     footer_text: string | null
     footer_version: string | null
+    /** System theme (app shell) for every user; never null. */
+    ui_theme: 'bitrix' | 'classic'
   }>>('/branding'),
   uploadLoginBackground: (file: File) => {
     const formData = new FormData()
@@ -804,8 +806,8 @@ export const brandingService = {
     })
   },
   deleteLogo: () => api.delete('/branding/logo'),
-  updateFooter: (data: { system_name?: string; footer_text?: string; footer_version?: string }) =>
-    api.put<ApiEnvelope<{ system_name: string; footer_text: string; footer_version: string }>>('/branding/footer', data),
+  updateFooter: (data: { system_name?: string; footer_text?: string; footer_version?: string; ui_theme?: 'bitrix' | 'classic' }) =>
+    api.put<ApiEnvelope<{ system_name: string; footer_text: string; footer_version: string; ui_theme: string }>>('/branding/footer', data),
 }
 
 // Organizations
@@ -1562,8 +1564,8 @@ export interface SalesOpportunity {
   cancelled_at?: string
   sla_breached: boolean
   sla_breached_at?: string
-  // Populated only where the handler preloads the association — neither
-  // list nor get does today, so these are typically undefined.
+  // Populated only where the handler preloads the association: list
+  // preloads both (assigned_user trimmed to id + name), get only contact.
   contact?: { id: string; profile_name?: string; phone_number?: string; cpf_cnpj?: string }
   assigned_user?: { id: string; full_name: string }
 }
@@ -1580,9 +1582,36 @@ export interface SalesOpportunityEvent {
   created_at: string
 }
 
+/** What the caller may see on the sales screen: all (view_all), their teams' sellers (view_team) or their own. */
+export type SalesScope = 'all' | 'team' | 'own'
+
+export interface SalesScopeInfo {
+  scope: SalesScope
+  sellers: { id: string; name: string }[]
+  units: { id: string; name: string }[]
+}
+
+export interface SalesSummary {
+  total: number
+  abertas: number
+  potencial: number
+  sem_direcionamento: number
+  sla_breached: number
+  convertida: number
+  perdida: number
+  conversion_rate: number
+  valor_prospecto: number
+  valor_convertido: number
+  valor_perdido: number
+}
+
 export const salesOpportunitiesService = {
   list: (params?: Record<string, string>) =>
     api.get<ApiEnvelope<{ opportunities: SalesOpportunity[]; total: number; has_more: boolean }>>('/sales-opportunities', { params }),
+  /** Indicators, scoped like the list; params: assigned_user_id, unit_id, from, to. */
+  summary: (params?: Record<string, string>) =>
+    api.get<ApiEnvelope<SalesSummary>>('/sales-opportunities/summary', { params }),
+  scope: () => api.get<ApiEnvelope<SalesScopeInfo>>('/sales-opportunities/scope'),
   create: (data: { contact_id: string; interest?: string; estimated_value?: number; estimated_quantity?: number; unit_of_measure?: string }) =>
     api.post<ApiEnvelope<SalesOpportunity>>('/sales-opportunities', data),
   // Permanent delete, regardless of stage/status — super admin only, the
@@ -1756,6 +1785,8 @@ export interface KnowledgeListParams {
   status?: string
   unit_id?: string
   department_id?: string
+  /** 'updated' = most recently updated first; default is by title. */
+  sort?: 'updated'
 }
 
 export interface KnowledgeChunk {
