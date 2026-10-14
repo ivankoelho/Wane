@@ -174,27 +174,11 @@ func (a *App) WebhookHandler(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid payload", nil, "")
 	}
 
-	// Verify webhook signature before processing any fields.
-	// Find a phoneNumberID from any change to look up the account's AppSecret.
-	if len(signature) > 0 {
-		for _, entry := range payload.Entry {
-			for _, change := range entry.Changes {
-				phoneNumberID := change.Value.Metadata.PhoneNumberID
-				if phoneNumberID == "" {
-					continue
-				}
-				account, err := a.getWhatsAppAccountCached(phoneNumberID)
-				if err != nil || account.AppSecret == "" {
-					continue
-				}
-				if !verifyWebhookSignature(body, signature, []byte(account.AppSecret)) {
-					a.Log.Warn("Invalid webhook signature", "phone_id", phoneNumberID)
-					return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Invalid signature", nil, "")
-				}
-				a.Log.Debug("Webhook signature verified successfully")
-				break
-			}
-		}
+	// Verify the signature before processing any field. Fail closed: see
+	// verifyWebhookPayload.
+	if !a.verifyWebhookPayload(body, signature, &payload) {
+		a.Log.Warn("Rejected webhook: missing or invalid signature")
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Invalid signature", nil, "")
 	}
 
 	// Process each entry
@@ -797,4 +781,55 @@ func (a *App) processContactSync(phoneNumberID, contactPhone, contactName, actio
 	default:
 		a.Log.Warn("Unknown contact sync action", "action", action)
 	}
+}
+
+// verifyWebhookPayload reports whether the request was signed by Meta for
+// every account it touches. Fail closed: a missing header, an account with no
+// usable secret, or a single mismatch rejects the whole payload, so a payload
+// signed for one tenant cannot carry changes for another.
+// Each account is checked against its own AppSecret, else its organization's
+// Meta app secret, else the global one (resolveMetaAppCreds).
+func (a *App) verifyWebhookPayload(body, signature []byte, payload *WebhookPayload) bool {
+	if len(signature) == 0 {
+		return false
+	}
+	verify := func(account *models.WhatsAppAccount) bool {
+		secret := account.AppSecret
+		if secret == "" {
+			_, s, _, err := a.resolveMetaAppCreds(account.OrganizationID)
+			if err == nil {
+				secret = s
+			}
+		}
+		if secret == "" {
+			a.Log.Error("Webhook rejected: account has no app secret", "phone_id", account.PhoneID)
+			return false
+		}
+		return verifyWebhookSignature(body, signature, []byte(secret))
+	}
+	for _, entry := range payload.Entry {
+		for _, change := range entry.Changes {
+			if phoneID := change.Value.Metadata.PhoneNumberID; phoneID != "" {
+				account, err := a.getWhatsAppAccountCached(phoneID)
+				if err != nil {
+					continue // unknown phone: processing finds no account either
+				}
+				if !verify(account) {
+					return false
+				}
+				continue
+			}
+			// Changes without a phone (template status) act on every account of
+			// the WABA, so the payload must be signed for all of them.
+			var accounts []models.WhatsAppAccount
+			a.DB.Where("business_id = ?", entry.ID).Find(&accounts)
+			for i := range accounts {
+				a.decryptAccountSecrets(&accounts[i])
+				if !verify(&accounts[i]) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }

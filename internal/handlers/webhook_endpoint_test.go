@@ -153,9 +153,9 @@ func makeMessagesPayload(phoneNumberID string) []byte {
 	return b
 }
 
-func TestApp_WebhookHandler_NoSignatureNoAppSecret_Accepted(t *testing.T) {
-	// When no AppSecret is configured for the matching account, the handler must
-	// not reject — it just skips signature verification.
+func TestApp_WebhookHandler_NoSignatureNoAppSecret_Rejected(t *testing.T) {
+	// Fail closed (audit run-1 webhook:unsigned-payload-accepted): an unsigned
+	// payload is rejected even when the account has no AppSecret.
 	app := newAppForWebhook(t, "")
 	org := testutil.CreateTestOrganization(t, app.DB)
 	acc := &models.WhatsAppAccount{
@@ -178,7 +178,7 @@ func TestApp_WebhookHandler_NoSignatureNoAppSecret_Accepted(t *testing.T) {
 	req.RequestCtx.Request.SetBody(body)
 
 	require.NoError(t, app.WebhookHandler(req))
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }
 
 func TestApp_WebhookHandler_ValidSignature_Accepted(t *testing.T) {
@@ -285,8 +285,8 @@ func TestApp_WebhookHandler_BadlyFormattedSignatureRejected(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }
 
-func TestApp_WebhookHandler_EmptyEntryAccepted(t *testing.T) {
-	// A payload with no entries should still 200 (no work to do).
+func TestApp_WebhookHandler_EmptyEntryUnsignedRejected(t *testing.T) {
+	// No signature header means the request did not come from Meta.
 	app := newAppForWebhook(t, "")
 
 	body, _ := json.Marshal(map[string]any{
@@ -300,5 +300,5 @@ func TestApp_WebhookHandler_EmptyEntryAccepted(t *testing.T) {
 	req.RequestCtx.Request.SetBody(body)
 
 	require.NoError(t, app.WebhookHandler(req))
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }

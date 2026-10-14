@@ -197,6 +197,7 @@ func webhookTestData(t *testing.T, app *App, msgStatus models.MessageStatus) (mo
 		PhoneID:        "phone-" + uid,
 		BusinessID:     "biz-" + uid,
 		AccessToken:    "token",
+		AppSecret:      "smb-secret",
 	}
 	require.NoError(t, app.DB.Create(&waAccount).Error)
 
@@ -556,6 +557,7 @@ func TestWebhookHandler_smb_message_echoes(t *testing.T) {
 		PhoneID:        "phone-echo-" + uid,
 		BusinessID:     "biz-echo-" + uid,
 		AccessToken:    "token",
+		AppSecret:      "smb-secret",
 	}
 	require.NoError(t, app.DB.Create(&waAccount).Error)
 
@@ -589,6 +591,7 @@ func TestWebhookHandler_smb_message_echoes(t *testing.T) {
 	req := testutil.NewRequest(t)
 	req.RequestCtx.Request.Header.SetMethod("POST")
 	req.RequestCtx.Request.Header.SetContentType("application/json")
+	req.RequestCtx.Request.Header.Set("X-Hub-Signature-256", signWebhookInternal(body, "smb-secret"))
 	req.RequestCtx.Request.SetBody(body)
 
 	// Execute WebhookHandler
@@ -629,6 +632,7 @@ func TestWebhookHandler_smb_app_state_sync(t *testing.T) {
 		PhoneID:        "phone-sync-" + uid,
 		BusinessID:     "biz-sync-" + uid,
 		AccessToken:    "token",
+		AppSecret:      "smb-secret",
 	}
 	require.NoError(t, app.DB.Create(&waAccount).Error)
 
@@ -656,6 +660,7 @@ func TestWebhookHandler_smb_app_state_sync(t *testing.T) {
 	req := testutil.NewRequest(t)
 	req.RequestCtx.Request.Header.SetMethod("POST")
 	req.RequestCtx.Request.Header.SetContentType("application/json")
+	req.RequestCtx.Request.Header.Set("X-Hub-Signature-256", signWebhookInternal(bodyAdd, "smb-secret"))
 	req.RequestCtx.Request.SetBody(bodyAdd)
 
 	require.NoError(t, app.WebhookHandler(req))
@@ -690,6 +695,7 @@ func TestWebhookHandler_smb_app_state_sync(t *testing.T) {
 	reqRemove := testutil.NewRequest(t)
 	reqRemove.RequestCtx.Request.Header.SetMethod("POST")
 	reqRemove.RequestCtx.Request.Header.SetContentType("application/json")
+	reqRemove.RequestCtx.Request.Header.Set("X-Hub-Signature-256", signWebhookInternal(bodyRemove, "smb-secret"))
 	reqRemove.RequestCtx.Request.SetBody(bodyRemove)
 
 	require.NoError(t, app.WebhookHandler(reqRemove))
@@ -704,4 +710,11 @@ func TestWebhookHandler_smb_app_state_sync(t *testing.T) {
 	err := app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, "9199997777").First(&checkDeleted).Error
 	assert.Error(t, err, "contact should have been soft-deleted and not found by standard query")
 	assert.True(t, checkUnscoped.DeletedAt.Valid, "DeletedAt should be populated")
+}
+
+// signWebhookInternal signs a body as Meta does (X-Hub-Signature-256).
+func signWebhookInternal(body []byte, appSecret string) string {
+	mac := hmac.New(sha256.New, []byte(appSecret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
