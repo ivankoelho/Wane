@@ -8,16 +8,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/shridarpatil/whatomate/internal/aitools"
 	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/calling"
 	"github.com/shridarpatil/whatomate/internal/config"
-	"github.com/shridarpatil/whatomate/internal/aitools"
 	"github.com/shridarpatil/whatomate/internal/knowledge"
+	"github.com/shridarpatil/whatomate/internal/middleware"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/storage"
 	"github.com/shridarpatil/whatomate/internal/tts"
-	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/usage"
+	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -90,7 +91,8 @@ func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
 	// Check for X-Organization-ID header to switch organizations
 	userID, _ := r.RequestCtx.UserValue("user_id").(uuid.UUID)
 	overrideOrgID := string(r.RequestCtx.Request.Header.Peek("X-Organization-ID"))
-	if overrideOrgID != "" {
+	// An API key is bound to the org it was created in; it never switches.
+	if overrideOrgID != "" && !isAPIKeyRequest(r) {
 		parsedOrgID, err := uuid.Parse(overrideOrgID)
 		if err == nil && parsedOrgID != defaultOrgID {
 			if a.IsSuperAdmin(userID) {
@@ -292,4 +294,11 @@ func (a *App) decodeRequest(r *fastglue.Request, v any) error {
 		return errEnvelopeSent
 	}
 	return nil
+}
+
+// isAPIKeyRequest reports whether the request authenticated with an API key
+// rather than an interactive session.
+func isAPIKeyRequest(r *fastglue.Request) bool {
+	_, ok := r.RequestCtx.UserValue(middleware.ContextKeyAPIKeyID).(uuid.UUID)
+	return ok
 }

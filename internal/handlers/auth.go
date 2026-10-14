@@ -420,6 +420,10 @@ type SwitchOrgRequest struct {
 
 // SwitchOrg generates new tokens for a different organization the user belongs to
 func (a *App) SwitchOrg(r *fastglue.Request) error {
+	// Sessions are for people: an API key must not mint JWTs that outlive it.
+	if isAPIKeyRequest(r) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "API keys cannot open sessions", nil, "")
+	}
 	userID, ok := r.RequestCtx.UserValue("user_id").(uuid.UUID)
 	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -556,6 +560,10 @@ func generateSlug(name string) string {
 // This is needed because httpOnly cookies cannot be read by JavaScript to pass
 // as a query parameter to the WebSocket connection URL.
 func (a *App) GetWSToken(r *fastglue.Request) error {
+	// Sessions are for people: an API key must not mint JWTs that outlive it.
+	if isAPIKeyRequest(r) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "API keys cannot open sessions", nil, "")
+	}
 	userID, ok := r.RequestCtx.UserValue("user_id").(uuid.UUID)
 	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")

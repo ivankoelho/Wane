@@ -333,6 +333,18 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 		a.Log.Info("Created SSO user", "user_id", user.ID, "email", user.Email, "provider", provider)
 	} else {
+		// An org's identity provider only vouches for that org's users: without
+		// this, whoever configures a provider could log in as anyone, including
+		// super admins of other orgs, by asserting their email.
+		if user.OrganizationID != orgID {
+			var n int64
+			a.DB.Model(&models.UserOrganization{}).Where("user_id = ? AND organization_id = ?", user.ID, orgID).Count(&n)
+			if n == 0 {
+				a.redirectWithError(r, "User not found. Contact your administrator.")
+				return nil
+			}
+		}
+
 		// User exists - update SSO info if not set
 		if user.SSOProvider == "" {
 			user.SSOProvider = provider
