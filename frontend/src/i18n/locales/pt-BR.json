@@ -267,8 +267,8 @@
   "nav": {
     "dashboard": "Painel",
     "chat": "Conversas",
-    "crm": "CRM",
-    "salesOperation": "Minha Operação",
+    "crm": "Protocolos",
+    "salesOperation": "CRM",
     "salesDashboard": "Dashboard de Vendas",
     "contacts": "Contatos",
     "analytics": "Análises",
@@ -310,8 +310,8 @@
     "groupChannels": "Canais",
     "whatsappUsage": "Consumo do WhatsApp",
     "groupService": "Atendimento",
-    "groupOccurrences": "Ocorrências",
-    "groupAccess": "Acesso",
+    "groupOccurrences": "Protocolos",
+    "groupAccess": "Pessoas e acesso",
     "groupIntegrations": "Integrações",
     "calling": "Chamadas",
     "callLogs": "Histórico de chamadas",
@@ -325,7 +325,16 @@
     "expandSidebar": "Expandir barra lateral",
     "collapseSidebar": "Recolher barra lateral",
     "toggleMenu": "Alternar menu",
-    "mainNavigation": "Navegação principal"
+    "mainNavigation": "Navegação principal",
+    "wallpaper": "Plano de fundo",
+    "wallpaperUpload": "Enviar imagem",
+    "wallpaperCustom": "Imagem personalizada",
+    "wallpaperRemove": "Remover imagem personalizada",
+    "wallpaperNotImage": "Escolha um arquivo de imagem",
+    "wallpaperTooLarge": "Não foi possível salvar a imagem. Tente uma menor.",
+    "conversations": "Conversas",
+    "notes": "Notas",
+    "phone": "Telefone"
   },
   "userMenu": {
     "myAccount": "Minha conta",
@@ -390,6 +399,7 @@
     "addReaction": "Adicionar reação",
     "filterByTags": "Filtrar por etiquetas",
     "filterAll": "Todos",
+    "filterByStatus": "Filtrar por status",
     "agentTyping": "{name} está digitando…",
     "statusNew": "Novo",
     "statusInProgress": "Em andamento",
@@ -515,7 +525,10 @@
     "serviceWindowExpired": "A janela de mensagens de 24 horas expirou. Somente mensagens de modelo podem ser enviadas até o cliente responder.",
     "sendTemplateAction": "Enviar modelo",
     "retrySending": "Tentar enviar novamente",
-    "conversationOwnedByAnother": "Esta conversa está atribuída a outro agente. Sua mensagem não foi enviada."
+    "conversationOwnedByAnother": "Esta conversa está atribuída a outro agente. Sua mensagem não foi enviada.",
+    "notesPickContact": "Selecione um contato",
+    "notesPickContactDesc": "Escolha um contato à esquerda para ler e escrever notas internas sobre ele.",
+    "openConversation": "Abrir conversa"
   },
   "contacts": {
     "title": "Contatos",
@@ -1519,7 +1532,30 @@
     "contextFixed": "Seu contexto: {context}.",
     "contextGlobalOnly": "somente conteúdo global",
     "contextChooseHelp": "Deixe a unidade e o departamento vazios para buscar só o conteúdo disponível a todos.",
-    "contextOutOfReach": "Este contexto está fora do seu alcance."
+    "contextOutOfReach": "Este contexto está fora do seu alcance.",
+    "tabHome": "Central de ajuda",
+    "tabDocs": "Documentos",
+    "homeTitle": "Como podemos ajudar?",
+    "homeSubtitle": "Encontre respostas nos manuais, processos e perguntas frequentes.",
+    "homeSearchPlaceholder": "Buscar na base de conhecimento",
+    "homeSuggested": "Sugestões:",
+    "homeCategories": "Categorias",
+    "homeDocCount": "Nenhum documento | 1 documento | {n} documentos",
+    "homeRecent": "Atualizados recentemente",
+    "homeResults": "Nenhum resultado | 1 resultado | {n} resultados",
+    "homeBack": "Voltar para a central",
+    "loadMore": "Carregar mais",
+    "readerBreadcrumb": "Caminho",
+    "readerManage": "Gerenciar documento",
+    "readerInCategory": "Em {category}",
+    "readerUpdated": "Atualizado em {date}",
+    "readerMinutes": "{n} min de leitura",
+    "readerOnThisPage": "Neste artigo",
+    "readerPrev": "Anterior",
+    "readerNext": "Próximo",
+    "readerPager": "Navegação entre artigos",
+    "readerTop": "Voltar ao topo",
+    "homeResultsFor": "Resultados para \"{q}\""
   },
   "xprocessIntegration": {
     "title": "Integração ERP X2",
@@ -2330,7 +2366,7 @@
     "changedByAnother": "Outra pessoa já assumiu ou alterou este atendimento. A lista foi atualizada."
   },
   "occurrences": {
-    "title": "Ocorrências",
+    "title": "Protocolos",
     "subtitle": "Casos de atendimento e protocolos",
     "searchPlaceholder": "Buscar por protocolo...",
     "allStages": "Todas as etapas",
@@ -3731,7 +3767,7 @@
     "permissionSentDesc": "O contato precisa aceitar a permissão de chamada no WhatsApp antes de você ligar. Tente novamente após ele aceitar."
   },
   "sales": {
-    "title": "Minha Operação",
+    "title": "CRM",
     "subtitle": "Acompanhe suas oportunidades de venda do funil ao fechamento",
     "tabMyWallet": "Minha carteira",
     "walletLoadFailed": "Falha ao carregar sua carteira. Tente novamente.",
@@ -3839,7 +3875,18 @@
     "estimatedValueChangeFailed": "Falha ao atualizar o valor estimado",
     "dashboardTitle": "Dashboard de Vendas",
     "dashboardSubtitle": "Indicadores gerenciais do funil de vendas",
-    "dashboardEmpty": "Nenhum indicador disponível ainda"
+    "dashboardEmpty": "Nenhum indicador disponível ainda",
+    "tabBoard": "Quadro",
+    "tabList": "Lista",
+    "scope_all": "Todas as oportunidades da organização",
+    "scope_team": "Oportunidades dos vendedores da sua equipe",
+    "scope_own": "Suas oportunidades, do funil ao fechamento",
+    "filtersLabel": "Filtros de vendas",
+    "filterStore": "Filtrar por loja",
+    "filterSeller": "Filtrar por vendedor",
+    "allStores": "Todas as lojas",
+    "allSellers": "Todos os vendedores",
+    "noSeller": "Sem vendedor"
   },
   "occurrenceDocuments": {
     "sectionLabel": "Notas fiscais e cupons",
@@ -4432,6 +4479,10 @@
         "label": "Ver todas as oportunidades",
         "description": "Ver e gerenciar oportunidades de qualquer vendedor."
       },
+      "sales_opportunities_view_team": {
+        "label": "Ver oportunidades da equipe",
+        "description": "Ver e gerenciar as oportunidades dos vendedores das equipes da pessoa (ex.: supervisor de loja)."
+      },
       "sales_opportunities_delete": {
         "label": "Excluir oportunidades definitivamente",
         "description": "Apagar uma oportunidade para sempre. Só tem efeito para super administradores."
@@ -4713,5 +4764,16 @@
     "repriceOff": "A medição está desligada neste servidor.",
     "loadForbidden": "Você não tem acesso ao consumo.",
     "priceRequired": "Preencha país, categoria, preço, moeda e início."
+  },
+  "phone": {
+    "notConfiguredTitle": "Telefone ainda não configurado",
+    "notConfiguredAgent": "O discador VoIP será liberado quando o administrador conectar o provedor de telefonia.",
+    "notConfiguredAdmin": "Conecte o provedor de telefonia VoIP (SIP) para liberar as ligações. A integração entra quando a validação do provedor for concluída.",
+    "configPath": "Configurações → Integrações → Telefonia (VoIP)",
+    "numberLabel": "Número de telefone",
+    "numberPlaceholder": "Digite um número",
+    "backspace": "Apagar último dígito",
+    "keypad": "Teclado numérico",
+    "call": "Ligar"
   }
 }

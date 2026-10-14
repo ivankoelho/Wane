@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader, DataTable, ErrorState, DeleteConfirmDialog, type Column } from '@/components/shared'
-import { TrendingUp, Briefcase, Target, CheckCircle2, XCircle, Percent, AlertTriangle, Wallet, PiggyBank, TrendingDown, Trash2, Pencil } from 'lucide-vue-next'
+import { PageHeader, DataTable, ErrorState, DeleteConfirmDialog, DateRangePicker, type Column } from '@/components/shared'
+import { TrendingUp, Briefcase, Target, CheckCircle2, XCircle, Percent, AlertTriangle, Wallet, PiggyBank, TrendingDown, Trash2, Pencil, Columns3, List, Store, UserRound, X } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
+import { useDateRange } from '@/composables/useDateRange'
 import { salesOpportunitiesService } from '@/services/api'
-import type { SalesOpportunity } from '@/services/api'
+import type { SalesOpportunity, SalesScopeInfo, SalesSummary } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
@@ -26,27 +27,78 @@ import SalesOpportunityDetailsDialog from '@/components/sales/SalesOpportunityDe
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-const currentUserId = computed(() => authStore.user?.id ?? '')
 
 const activeTab = ref<'wallet' | 'closed'>('wallet')
 const boardRef = ref<InstanceType<typeof SalesOpportunityBoard> | null>(null)
 
-// ponytail: "Minha carteira" is client-aggregated for this first cut (spec
-// §8/Task 15) — a single fetch of the current user's opportunities (all
-// statuses, up to the 100-item API cap) drives both the stats row and the
-// closed-sales tab, instead of a dedicated backend aggregation endpoint. A
-// user with more than 100 opportunities gets undercounted stats. Upgrade
-// path: Task 16's widget-engine numbers replace this entirely.
+// One sales screen for everyone (it replaced "Minha Operação" + "Dashboard de
+// Vendas"). The backend scopes every request to what the user may see —
+// admin/SAC supervisor: all; store supervisor (view_team): their teams'
+// sellers; seller: their own — and /scope says which sellers/stores the
+// manual filters below may offer.
+const scopeInfo = ref<SalesScopeInfo>({ scope: 'own', sellers: [], units: [] })
+const unitFilter = ref('all')
+const sellerFilter = ref('all')
+const filterParams = computed(() => {
+  const p: { assigned_user_id?: string; unit_id?: string } = {}
+  if (sellerFilter.value !== 'all') p.assigned_user_id = sellerFilter.value
+  if (unitFilter.value !== 'all') p.unit_id = unitFilter.value
+  return p
+})
+const hasFilters = computed(() => unitFilter.value !== 'all' || sellerFilter.value !== 'all')
+function clearFilters() {
+  unitFilter.value = 'all'
+  sellerFilter.value = 'all'
+}
+
+async function fetchScope() {
+  try {
+    const { data } = await salesOpportunitiesService.scope()
+    scopeInfo.value = data.data
+  } catch {
+    // Without it the screen still works, just without the manual filters.
+  }
+}
+
+// Indicator period (closings inside it; the open pipeline is always "now").
+const {
+  selectedRange,
+  customDateRange,
+  isDatePickerOpen,
+  dateRange,
+  formatDateRangeDisplay,
+  applyCustomRange: applyCustomRangeBase,
+} = useDateRange({ storageKey: 'sales_operation' })
+
+const summary = ref<SalesSummary | null>(null)
+async function fetchSummary() {
+  try {
+    const { from, to } = dateRange.value
+    const { data } = await salesOpportunitiesService.summary({ ...filterParams.value, from, to })
+    summary.value = data.data
+  } catch (e) {
+    toast.error(getErrorMessage(e, t('sales.walletLoadFailed')))
+  }
+}
+function applyCustomRange() {
+  applyCustomRangeBase()
+  fetchSummary()
+}
+watch(selectedRange, (v) => { if (v !== 'custom') fetchSummary() })
+
+// ponytail: the list tab still loads one page of up to 100 (API cap) and
+// filters by stage client-side; paginate server-side if a scope outgrows it.
 const wallet = ref<SalesOpportunity[]>([])
 const walletLoading = ref(false)
 const walletFailed = ref(false)
 
+// Every mutation path below calls this: list + indicators stay in step.
 async function fetchWallet() {
-  if (!currentUserId.value) return
   walletLoading.value = true
   walletFailed.value = false
+  fetchSummary()
   try {
-    const { data } = await salesOpportunitiesService.list({ assigned_user_id: currentUserId.value, limit: '100' })
+    const { data } = await salesOpportunitiesService.list({ ...filterParams.value, limit: '100' })
     wallet.value = data.data.opportunities
   } catch (e) {
     walletFailed.value = true
@@ -55,26 +107,23 @@ async function fetchWallet() {
     walletLoading.value = false
   }
 }
-
-function sumEstimatedValue(opportunities: SalesOpportunity[]): number {
-  return opportunities.reduce((sum, o) => sum + (o.estimated_value ?? 0), 0)
-}
+watch(filterParams, fetchWallet)
 
 const stats = computed(() => {
-  const total = wallet.value.length
-  const potencial = wallet.value.filter(o => o.stage === 'potencial').length
-  const convertida = wallet.value.filter(o => o.status === 'convertida').length
-  const perdida = wallet.value.filter(o => o.status === 'perdida').length
-  const semDirecionamento = wallet.value.filter(o => o.status === 'aberta' && !o.direcionamento).length
-  const closedTotal = convertida + perdida
-  const conversionRate = closedTotal > 0 ? (convertida / closedTotal) * 100 : 0
-  // Value totals the agent needs alongside the counts above — how much is
-  // still open (prospecção/pipeline) vs. how much already closed either way.
-  const valorProspecto = sumEstimatedValue(wallet.value.filter(o => o.status === 'aberta'))
-  const valorConvertido = sumEstimatedValue(wallet.value.filter(o => o.status === 'convertida'))
-  const valorPerdido = sumEstimatedValue(wallet.value.filter(o => o.status === 'perdida'))
-  return { total, potencial, convertida, perdida, semDirecionamento, conversionRate, valorProspecto, valorConvertido, valorPerdido }
+  const s = summary.value
+  return {
+    total: s?.total ?? 0,
+    potencial: s?.potencial ?? 0,
+    convertida: s?.convertida ?? 0,
+    perdida: s?.perdida ?? 0,
+    semDirecionamento: s?.sem_direcionamento ?? 0,
+    conversionRate: s?.conversion_rate ?? 0,
+    valorProspecto: s?.valor_prospecto ?? 0,
+    valorConvertido: s?.valor_convertido ?? 0,
+    valorPerdido: s?.valor_perdido ?? 0,
+  }
 })
+const statsLoading = computed(() => summary.value === null)
 
 const valueChartData = computed(() => ({
   labels: [t('sales.statValueProspect'), t('sales.statValueConverted'), t('sales.statValueLost')],
@@ -266,19 +315,63 @@ function handleDetailsChange() {
   fetchWallet()
 }
 
-onMounted(fetchWallet)
+onMounted(() => {
+  fetchScope()
+  fetchWallet()
+})
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
-    <PageHeader :title="$t('sales.title')" :description="$t('sales.subtitle')" :icon="TrendingUp" icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20" />
+  <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
+    <Tabs v-model="activeTab" orientation="vertical" class="flex min-h-0 min-w-0 flex-1">
+      <TabsList class="page-rail">
+        <TabsTrigger value="wallet" :title="$t('sales.tabBoard')" class="page-rail-item"><Columns3 class="h-5 w-5" aria-hidden="true" /><span class="page-rail-label">{{ $t('sales.tabBoard') }}</span></TabsTrigger>
+        <TabsTrigger value="closed" :title="$t('sales.tabList')" class="page-rail-item"><List class="h-5 w-5" aria-hidden="true" /><span class="page-rail-label">{{ $t('sales.tabList') }}</span></TabsTrigger>
+      </TabsList>
 
-    <Tabs v-model="activeTab" class="flex-1 min-h-0 flex flex-col">
-      <div class="px-6 pt-4">
-        <TabsList>
-          <TabsTrigger value="wallet">{{ $t('sales.tabMyWallet') }}</TabsTrigger>
-          <TabsTrigger value="closed">{{ $t('sales.tabAllOpportunities') }}</TabsTrigger>
-        </TabsList>
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+      <PageHeader :title="$t('sales.title')" :description="$t('sales.scope_' + scopeInfo.scope)" :icon="TrendingUp" icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20">
+        <template #actions>
+          <DateRangePicker
+            v-model:selected-range="selectedRange"
+            v-model:custom-date-range="customDateRange"
+            v-model:is-date-picker-open="isDatePickerOpen"
+            :format-date-range-display="formatDateRangeDisplay"
+            @apply-custom="applyCustomRange"
+          />
+        </template>
+      </PageHeader>
+
+      <!-- Manual filters for supervisors/admins (sellers only see their own) -->
+      <div
+        v-if="scopeInfo.scope !== 'own'"
+        class="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-6 py-2.5 light:border-gray-200"
+        role="group"
+        :aria-label="$t('sales.filtersLabel')"
+      >
+        <Select v-if="scopeInfo.units.length" v-model="unitFilter">
+          <SelectTrigger class="h-8 w-48 text-[13px]" :aria-label="$t('sales.filterStore')">
+            <Store class="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{{ $t('sales.allStores') }}</SelectItem>
+            <SelectItem v-for="u in scopeInfo.units" :key="u.id" :value="u.id">{{ u.name }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select v-model="sellerFilter">
+          <SelectTrigger class="h-8 w-56 text-[13px]" :aria-label="$t('sales.filterSeller')">
+            <UserRound class="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{{ $t('sales.allSellers') }}</SelectItem>
+            <SelectItem v-for="s in scopeInfo.sellers" :key="s.id" :value="s.id">{{ s.name }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button v-if="hasFilters" variant="ghost" size="sm" class="h-8 text-[13px]" @click="clearFilters">
+          <X class="mr-1 h-3.5 w-3.5" aria-hidden="true" />{{ $t('common.clear') }}
+        </Button>
       </div>
 
       <TabsContent value="wallet" class="flex-1 min-h-0">
@@ -293,7 +386,7 @@ onMounted(fetchWallet)
         <ScrollArea v-else orientation="vertical" class="flex-1 h-full">
           <div class="p-6 space-y-6">
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              <template v-if="walletLoading">
+              <template v-if="statsLoading">
                 <div v-for="i in 6" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
                   <Skeleton class="h-4 w-24 mb-3 bg-white/[0.08] light:bg-gray-200" />
                   <Skeleton class="h-8 w-16 bg-white/[0.08] light:bg-gray-200" />
@@ -360,7 +453,7 @@ onMounted(fetchWallet)
             <!-- Value totals — how much is still in the pipeline vs. already
                  closed either way, in R$ rather than a headcount. -->
             <div class="grid gap-4 md:grid-cols-3">
-              <template v-if="walletLoading">
+              <template v-if="statsLoading">
                 <div v-for="i in 3" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
                   <Skeleton class="h-4 w-24 mb-3 bg-white/[0.08] light:bg-gray-200" />
                   <Skeleton class="h-8 w-32 bg-white/[0.08] light:bg-gray-200" />
@@ -397,7 +490,7 @@ onMounted(fetchWallet)
               </template>
             </div>
 
-            <Card v-if="!walletLoading && (stats.valorProspecto || stats.valorConvertido || stats.valorPerdido)" class="p-6">
+            <Card v-if="!statsLoading && (stats.valorProspecto || stats.valorConvertido || stats.valorPerdido)" class="p-6">
               <h3 class="text-sm font-medium text-white/70 light:text-gray-600 mb-4">{{ $t('sales.valueChartTitle') }}</h3>
               <div class="h-64">
                 <Doughnut :data="valueChartData" :options="valueChartOptions" />
@@ -407,7 +500,7 @@ onMounted(fetchWallet)
             <Card class="overflow-hidden">
               <SalesOpportunityBoard
                 ref="boardRef"
-                :assigned-user-id="currentUserId"
+                :filters="filterParams"
                 @convert="handleConvert"
                 @lose="handleLose"
                 @stage-change="handleStageChange"
@@ -521,6 +614,7 @@ onMounted(fetchWallet)
           </div>
         </ScrollArea>
       </TabsContent>
+      </div>
     </Tabs>
 
     <SalesOpportunityDetailsDialog

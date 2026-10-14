@@ -3,20 +3,16 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X
-} from 'lucide-vue-next'
+import { Menu, X } from 'lucide-vue-next'
 import { wsService } from '@/services/websocket'
 import { authService } from '@/services/api'
 import { useBranding } from '@/composables/useBranding'
+import { useWallpaper } from '@/composables/useWallpaper'
 import OrganizationSwitcher from './OrganizationSwitcher.vue'
 import UserMenu from './UserMenu.vue'
+import WallpaperPicker from './WallpaperPicker.vue'
 import ActiveCallPanel from '@/components/calling/ActiveCallPanel.vue'
 import { ScrollToTop } from '@/components/shared'
 import { navigationSections, type NavSection, type NavItem } from './navigation'
@@ -27,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { logoUrl, systemName, loadBranding } = useBranding()
+const { background: wallpaper } = useWallpaper()
 const isCollapsed = ref(true)
 const isMobileMenuOpen = ref(false)
 
@@ -78,7 +75,7 @@ function filterItems(items: NavSection['items']) {
       const isActive = originalPath === '/'
         ? route.name === 'dashboard'
         : originalPath === '/chat'
-          ? route.name === 'chat' || route.name === 'chat-conversation'
+          ? route.path === '/chat' || route.path.startsWith('/chat/')
           : route.path.startsWith(originalPath)
 
       return {
@@ -101,6 +98,29 @@ const navSections = computed(() => {
     .filter(section => section.items.length > 0)
 })
 
+// Bitrix-style top tabs: the active module's sub-pages live only here, so the
+// sidebar stays a flat list of modules. Groups (Settings) become clusters
+// split by a divider instead of labelled headers.
+const activeItem = computed(() => navSections.value.flatMap(s => s.items).find(i => i.active))
+const tabGroups = computed(() => {
+  const item = activeItem.value
+  if (item?.groups) return item.groups
+  if (item?.children?.length) return [{ label: item.name, items: item.children }]
+  return []
+})
+// The tab whose path is the longest prefix of the URL: /chat/<id> lights
+// "Conversations", /chat/notes lights "Notes", /settings/sso lights "SSO".
+const activeTabPath = computed(() => {
+  const p = route.path
+  return tabGroups.value
+    .flatMap(g => g.items.map(i => i.path))
+    .filter(tp => p === tp || p.startsWith(tp.endsWith('/') ? tp : tp + '/'))
+    .sort((a, b) => b.length - a.length)[0]
+})
+
+// Unlabelled sections (Settings) are pinned to the sidebar's bottom edge.
+const mainSections = computed(() => navSections.value.filter(s => s.label))
+const footerItems = computed(() => navSections.value.filter(s => !s.label).flatMap(s => s.items))
 
 const toggleSidebar = () => {
   isCollapsed.value = !isCollapsed.value
@@ -113,93 +133,74 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-[#0a0a0b] light:bg-gray-50">
+  <div class="on-wallpaper relative flex h-screen overflow-hidden" :style="{ background: wallpaper, '--wallpaper': wallpaper }">
     <!-- Skip link for accessibility -->
     <a href="#main-content" class="skip-link">{{ $t('nav.skipToMain') }}</a>
-
-    <!-- Mobile header -->
-    <header class="fixed top-0 left-0 right-0 z-50 flex h-12 items-center justify-between border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur-sm px-3 md:hidden">
-      <RouterLink to="/" class="flex items-center gap-2">
-        <img :src="logoUrl || '/logo-atacadao.png'" alt="" class="h-7 w-7 rounded-lg object-cover shadow-lg shadow-black/20">
-        <span class="font-semibold text-sm text-white light:text-gray-900">{{ systemName || 'WhatsApp ATC' }}</span>
-      </RouterLink>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="h-8 w-8 text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
-        :aria-label="$t('nav.toggleMenu')"
-        :aria-expanded="isMobileMenuOpen"
-        @click="isMobileMenuOpen = !isMobileMenuOpen"
-      >
-        <X v-if="isMobileMenuOpen" class="h-5 w-5" />
-        <Menu v-else class="h-5 w-5" />
-      </Button>
-    </header>
 
     <!-- Mobile menu overlay -->
     <div
       v-if="isMobileMenuOpen"
-      class="fixed inset-0 z-40 bg-black/60 light:bg-black/30 backdrop-blur-sm md:hidden"
+      class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
       @click="isMobileMenuOpen = false"
     />
 
-    <!-- Sidebar -->
+    <!-- Sidebar: glass over the wallpaper, white text in both colour modes -->
     <aside
       :class="[
-        'flex flex-col border-r border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-white transition-all duration-300',
-        'fixed inset-y-0 left-0 z-40 md:relative',
-        'transform md:transform-none',
+        'shell-glass flex shrink-0 flex-col text-white transition-[width,transform] duration-300',
+        'fixed inset-y-0 left-0 z-40 bg-black/45 backdrop-blur-xl md:relative md:bg-black/15 md:backdrop-blur-md',
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-        isCollapsed ? 'w-64 md:w-16' : 'w-64'
+        isCollapsed ? 'w-[272px] md:w-[70px]' : 'w-[272px]'
       ]"
       role="navigation"
       :aria-label="$t('nav.mainNavigation')"
     >
-      <!-- Logo (hidden on mobile, shown in header instead) -->
-      <div class="hidden md:flex h-12 items-center justify-between px-3 border-b border-white/[0.08] light:border-gray-200">
-        <RouterLink to="/" class="flex items-center gap-2">
-          <img :src="logoUrl || '/logo-atacadao.png'" alt="" class="h-7 w-7 rounded-lg object-cover shadow-lg shadow-black/20 shrink-0">
-          <span
-            v-if="!isCollapsed"
-            class="font-semibold text-sm text-white light:text-gray-900"
-          >
-            {{ systemName || 'WhatsApp ATC' }}
-          </span>
-        </RouterLink>
-        <Button
-          variant="ghost"
-          size="icon"
+      <!-- Geometry is in px on purpose (html is 14px, so rem spacing lands on
+           half pixels). Everything shares one icon axis: 10px nav gutter +
+           4px group inset + 12px item padding = icon at 26px expanded, and
+           centred at 35px in the 70px collapsed rail. The toggle (15px + 40px
+           button, 18px icon) and the org switcher sit on that same axis. -->
+      <div class="flex h-14 shrink-0 items-center gap-2 px-[15px]">
+        <button
+          type="button"
           data-testid="sidebar-toggle"
-          class="h-7 w-7 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-400 light:hover:text-gray-900 light:hover:bg-gray-100"
+          class="hidden h-[40px] w-[40px] shrink-0 items-center justify-center rounded-xl text-white/85 transition hover:bg-white/15 hover:text-white md:flex"
           :aria-label="isCollapsed ? $t('nav.expandSidebar') : $t('nav.collapseSidebar')"
           :aria-expanded="!isCollapsed"
           @click="toggleSidebar"
         >
-          <ChevronLeft v-if="!isCollapsed" class="h-3.5 w-3.5" />
-          <ChevronRight v-else class="h-3.5 w-3.5" />
-        </Button>
+          <Menu class="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+        <RouterLink
+          to="/"
+          :class="['flex min-w-0 items-center gap-2 text-white hover:text-white', isCollapsed && 'md:hidden']"
+          @click="isMobileMenuOpen = false"
+        >
+          <img :src="logoUrl || '/logo-atacadao.png'" alt="" class="h-7 w-7 shrink-0 rounded-lg object-cover shadow-lg shadow-black/20">
+          <span class="truncate text-[17px] font-semibold tracking-tight">{{ systemName || 'WhatsApp ATC' }}</span>
+        </RouterLink>
       </div>
-      <!-- Mobile logo spacer -->
-      <div class="h-12 md:hidden" />
 
       <!-- Organization Switcher (Super Admin only) -->
-      <OrganizationSwitcher :collapsed="isCollapsed" />
+      <OrganizationSwitcher :collapsed="isCollapsed" @expand="isCollapsed = false" />
 
       <!-- Navigation -->
-      <ScrollArea class="flex-1 py-2">
-        <nav class="px-2" role="menubar">
-          <template v-for="(section, sIdx) in navSections" :key="section.label">
-            <!-- Section header -->
+      <ScrollArea class="min-h-0 flex-1">
+        <nav class="space-y-[8px] px-[10px] pb-[8px]" role="menubar">
+          <!-- Each labelled section is a frosted group, like Bitrix's "Collaboration" block -->
+          <div
+            v-for="section in mainSections"
+            :key="section.label"
+            class="rounded-2xl bg-white/[0.08] p-[4px]"
+          >
             <div
-              v-if="section.label && !isCollapsed"
-              :class="['px-2.5 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/30 light:text-gray-400', sIdx === 0 && 'pt-1']"
+              v-if="!isCollapsed"
+              class="px-[12px] pb-[4px] pt-[6px] text-[11px] font-medium text-white/60"
             >
               {{ $t(section.label) }}
             </div>
-            <div v-else-if="sIdx > 0" :class="['my-2 mx-2.5 border-t border-white/[0.06] light:border-gray-200', isCollapsed && 'mx-1']" />
 
-            <!-- Section items -->
-            <div class="space-y-0.5">
+            <div class="space-y-[2px]">
               <template v-for="item in section.items" :key="item.path">
                 <!-- ponytail: tooltip still mounts once isCollapsed flips true even on
                      sub-md viewports where the label stays visible; needs viewport-width
@@ -209,90 +210,108 @@ const handleLogout = async () => {
                     <RouterLink
                       :to="item.path"
                       :class="[
-                        'nav-active-indicator btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
-                        item.active
-                          ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
-                          : 'text-white/50 hover:text-white hover:bg-white/[0.06] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
-                        isCollapsed && 'md:justify-center md:px-2'
+                        'shell-nav-item btn-press',
+                        item.active && 'is-active',
+                        isCollapsed && 'md:justify-center md:px-0'
                       ]"
                       :data-active="item.active"
                       role="menuitem"
                       :aria-current="item.active ? 'page' : undefined"
                       @click="isMobileMenuOpen = false"
                     >
-                      <component :is="item.icon" :class="['h-4 w-4 shrink-0', item.color]" aria-hidden="true" />
-                      <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
+                      <component :is="item.icon" class="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                      <span :class="['truncate', isCollapsed && 'md:sr-only']">{{ $t(item.name) }}</span>
                     </RouterLink>
                   </TooltipTrigger>
                   <TooltipContent side="right">{{ $t(item.name) }}</TooltipContent>
                 </Tooltip>
-
-                <!-- Submenu items (grouped for Settings, flat otherwise) -->
-                <template v-if="item.groups && item.active && !isCollapsed">
-                  <template v-for="group in item.groups" :key="group.label">
-                    <div
-                      v-if="!(group.items.length === 1 && group.items[0].name === group.label)"
-                      class="mt-2.5 mb-0.5 px-2.5 ml-4 text-[10px] font-semibold uppercase tracking-wider text-white/25 light:text-gray-400"
-                    >
-                      {{ $t(group.label) }}
-                    </div>
-                    <RouterLink
-                      v-for="child in group.items"
-                      :key="child.path"
-                      :to="child.path"
-                      :class="[
-                        'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ml-4',
-                        route.path === child.path
-                          ? 'bg-white/[0.06] text-white light:bg-gray-100 light:text-gray-900'
-                          : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-50'
-                      ]"
-                      role="menuitem"
-                      :aria-current="route.path === child.path ? 'page' : undefined"
-                      @click="isMobileMenuOpen = false"
-                    >
-                      <component :is="child.icon" :class="['h-3.5 w-3.5 shrink-0', item.color]" aria-hidden="true" />
-                      <span>{{ $t(child.name) }}</span>
-                    </RouterLink>
-                  </template>
-                </template>
-                <template v-else-if="item.children && item.active && !isCollapsed">
-                  <RouterLink
-                    v-for="child in item.children"
-                    :key="child.path"
-                    :to="child.path"
-                    :class="[
-                      'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ml-4',
-                      route.path === child.path
-                        ? 'bg-white/[0.06] text-white light:bg-gray-100 light:text-gray-900'
-                        : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-50'
-                    ]"
-                    role="menuitem"
-                    :aria-current="route.path === child.path ? 'page' : undefined"
-                    @click="isMobileMenuOpen = false"
-                  >
-                    <component :is="child.icon" :class="['h-3.5 w-3.5 shrink-0', item.color]" aria-hidden="true" />
-                    <span>{{ $t(child.name) }}</span>
-                  </RouterLink>
-                </template>
               </template>
             </div>
-          </template>
+          </div>
         </nav>
       </ScrollArea>
 
-      <!-- User Menu -->
-      <UserMenu :collapsed="isCollapsed" @logout="handleLogout" />
+      <!-- Pinned to the bottom (Bitrix keeps Settings there too). Same 10+4px
+           inset as the groups above so the icon stays on the shared axis. -->
+      <div v-if="footerItems.length" class="shrink-0 px-[14px] pb-[12px] pt-[6px]" role="menubar">
+        <Tooltip v-for="item in footerItems" :key="item.path" :disabled="!isCollapsed" :delay-duration="150">
+          <TooltipTrigger as-child>
+            <RouterLink
+              :to="item.path"
+              :class="[
+                'shell-nav-item btn-press',
+                item.active && 'is-active',
+                isCollapsed && 'md:justify-center md:px-0'
+              ]"
+              :data-active="item.active"
+              role="menuitem"
+              :aria-current="item.active ? 'page' : undefined"
+              @click="isMobileMenuOpen = false"
+            >
+              <component :is="item.icon" class="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span :class="['truncate', isCollapsed && 'md:sr-only']">{{ $t(item.name) }}</span>
+            </RouterLink>
+          </TooltipTrigger>
+          <TooltipContent side="right">{{ $t(item.name) }}</TooltipContent>
+        </Tooltip>
+      </div>
     </aside>
 
-    <!-- Main content -->
-    <main id="main-content" class="flex-1 overflow-hidden pt-12 md:pt-0 bg-[#0a0a0b] light:bg-gray-50" role="main">
-      <RouterView v-slot="{ Component, route: viewRoute }">
-        <Transition name="page" mode="out-in">
-          <component :is="Component" :key="viewRoute.meta.stableKey ? String(viewRoute.name) : viewRoute.path" />
-        </Transition>
-      </RouterView>
-      <ActiveCallPanel />
-      <ScrollToTop />
-    </main>
+    <div class="flex min-w-0 flex-1 flex-col">
+      <!-- Top bar: module tabs on the left, workspace tools on the right -->
+      <header class="shell-glass flex h-14 shrink-0 items-center gap-2 px-2 text-white md:px-3">
+        <button
+          type="button"
+          class="shell-chip h-9 w-9 justify-center md:hidden"
+          :aria-label="$t('nav.toggleMenu')"
+          :aria-expanded="isMobileMenuOpen"
+          @click="isMobileMenuOpen = !isMobileMenuOpen"
+        >
+          <X v-if="isMobileMenuOpen" class="h-5 w-5" />
+          <Menu v-else class="h-5 w-5" />
+        </button>
+
+        <nav
+          class="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          :aria-label="activeItem ? $t(activeItem.name) : undefined"
+        >
+          <template v-if="tabGroups.length">
+            <template v-for="(group, gIdx) in tabGroups" :key="group.label">
+              <span v-if="gIdx > 0" class="mx-1.5 h-5 w-px shrink-0 bg-white/25" aria-hidden="true" />
+              <div class="flex shrink-0 items-center gap-1" role="group" :aria-label="$t(group.label)">
+                <RouterLink
+                  v-for="tab in group.items"
+                  :key="tab.path"
+                  :to="tab.path"
+                  :class="['shell-tab', activeTabPath === tab.path && 'is-active']"
+                  :aria-current="activeTabPath === tab.path ? 'page' : undefined"
+                >
+                  {{ $t(tab.name) }}
+                </RouterLink>
+              </div>
+            </template>
+          </template>
+          <span v-else-if="activeItem" class="shell-tab is-active">{{ $t(activeItem.name) }}</span>
+        </nav>
+
+        <WallpaperPicker />
+        <UserMenu collapsed @logout="handleLogout" />
+      </header>
+
+      <!-- Main content: a rounded sheet floating over the wallpaper -->
+      <main
+        id="main-content"
+        class="relative mx-1.5 mb-1.5 flex-1 overflow-hidden rounded-2xl bg-background shadow-[0_8px_40px_-12px_rgba(0,0,0,0.45)] md:mb-2 md:ml-0 md:mr-2"
+        role="main"
+      >
+        <RouterView v-slot="{ Component, route: viewRoute }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="viewRoute.meta.stableKey ? String(viewRoute.name) : viewRoute.path" />
+          </Transition>
+        </RouterView>
+        <ActiveCallPanel />
+        <ScrollToTop />
+      </main>
+    </div>
   </div>
 </template>

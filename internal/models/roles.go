@@ -325,6 +325,10 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceSalesOpportunities, Action: ActionRead, Description: "View sales opportunities"},
 		{Resource: ResourceSalesOpportunities, Action: ActionWrite, Description: "Create and edit sales opportunities"},
 		{Resource: ResourceSalesOpportunities, Action: ActionViewAll, Description: "View and manage all sales opportunities, including those assigned to other agents"},
+		// Store supervisor: the sellers who share a team with the user (a
+		// store's sales team is a Team tagged with that unit). Same team
+		// definition as conversations:view_team.
+		{Resource: ResourceSalesOpportunities, Action: ActionViewTeam, Description: "View and manage the sales opportunities of the sellers in the user's teams"},
 		// Exclusão permanente, independente da fase/status. Mesmo padrão de
 		// occurrences:delete: não entra na lista de permissões padrão de
 		// nenhum papel (o handler exige super admin explicitamente, então

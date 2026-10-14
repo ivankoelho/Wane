@@ -254,22 +254,34 @@ watchDebounced(() => props.protocol, loadAll, { debounce: 300 })
 </script>
 
 <template>
-  <div id="occurrences-board" class="flex gap-4 overflow-x-auto p-4">
+  <div id="occurrences-board" class="flex gap-3 overflow-x-auto p-4">
     <div
       v-for="col in columns"
       :key="col.stage.id"
       :data-board-column="col.stage.name"
-      class="flex w-72 shrink-0 flex-col rounded-lg border border-white/[0.08] light:border-gray-200 bg-white/[0.02] light:bg-gray-50"
+      class="flex w-[288px] shrink-0 flex-col gap-2"
     >
-      <div class="flex items-center justify-between gap-2 border-b border-white/[0.08] light:border-gray-200 p-3">
-        <span class="flex items-center gap-2 text-sm font-medium">
-          <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: col.stage.color }" />
-          {{ col.stage.name }}
+      <!-- Stage band (Bitrix's coloured column header): a tint of the stage
+           colour with a solid underline, so any stage colour stays legible
+           in both themes. -->
+      <div
+        class="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+        :style="{
+          backgroundColor: `color-mix(in srgb, ${col.stage.color} 18%, hsl(var(--card)))`,
+          boxShadow: `inset 0 -3px 0 ${col.stage.color}`,
+        }"
+      >
+        <span class="flex min-w-0 items-center gap-2 text-[13px] font-semibold text-foreground">
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: col.stage.color }" aria-hidden="true" />
+          <span class="truncate">{{ col.stage.name }}</span>
         </span>
-        <span class="text-xs text-muted-foreground" data-board-column-count>{{ col.total }}</span>
+        <span
+          class="min-w-[24px] rounded-full bg-card/80 px-2 py-0.5 text-center text-xs font-semibold text-foreground"
+          data-board-column-count
+        >{{ col.total }}</span>
       </div>
 
-      <div class="flex flex-1 flex-col gap-2 p-2 min-h-24">
+      <div class="flex flex-1 flex-col gap-2 rounded-xl bg-muted/50 p-2 min-h-24">
         <div v-if="col.failed" class="p-3 text-center">
           <p class="text-xs text-muted-foreground">{{ $t('occurrences.columnLoadFailed') }}</p>
           <Button variant="outline" size="sm" class="mt-2" @click="loadColumn(col, 1)">

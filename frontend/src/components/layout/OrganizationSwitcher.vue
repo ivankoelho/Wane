@@ -17,9 +17,12 @@ import { organizationsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Building2, Plus, Loader2 } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   collapsed?: boolean
 }>()
+
+// Collapsed, there is no room for the picker: the icon opens the sidebar instead.
+const emit = defineEmits<{ expand: [] }>()
 
 const { t } = useI18n()
 const organizationsStore = useOrganizationsStore()
@@ -117,28 +120,31 @@ const refreshOrgs = async () => {
 </script>
 
 <template>
-  <div v-if="shouldShowSwitcher" class="px-2 py-2 border-b">
-    <div v-if="!collapsed" class="space-y-1">
-      <div class="flex items-center justify-between">
-        <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-1">
+  <!-- Same 14px inset and frosted group as the nav sections below, so the
+       icon and label line up with every other sidebar item. -->
+  <div v-if="shouldShowSwitcher" class="px-[14px] pb-[8px]">
+    <div v-if="!collapsed" class="space-y-[6px] rounded-2xl bg-white/[0.08] p-[4px]">
+      <div class="flex items-center justify-between pl-[8px] pr-[2px] pt-[2px]">
+        <span class="text-[11px] font-medium text-white/60">
           {{ $t('organizations.organization') }}
         </span>
-        <Button
+        <button
           v-if="canCreateOrg"
-          variant="ghost"
-          size="icon"
-          class="h-5 w-5"
+          type="button"
+          class="flex h-6 w-6 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white"
+          :aria-label="t('organizations.createTitle')"
+          :title="t('organizations.createTitle')"
           @click="isCreateDialogOpen = true"
         >
-          <Plus class="h-3 w-3" />
-        </Button>
+          <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
       <Select
         v-if="orgList.length > 0"
         :model-value="currentOrgId"
         @update:model-value="handleOrgChange"
       >
-        <SelectTrigger class="h-8 text-[13px]">
+        <SelectTrigger class="h-9 rounded-xl border-white/20 bg-white/15 text-[13px] text-white [&>svg]:text-white/70">
           <SelectValue :placeholder="$t('organizations.selectOrganization')" />
         </SelectTrigger>
         <SelectContent>
@@ -154,27 +160,28 @@ const refreshOrgs = async () => {
           </SelectItem>
         </SelectContent>
       </Select>
-      <div v-else-if="organizationsStore.loading" class="text-[12px] text-muted-foreground px-1">
+      <div v-else-if="organizationsStore.loading" class="px-[8px] pb-[4px] text-[12px] text-white/60">
         {{ $t('organizations.loading') }}
       </div>
-      <div v-else-if="organizationsStore.error" class="text-[12px] text-destructive px-1">
+      <div v-else-if="organizationsStore.error" class="px-[8px] pb-[4px] text-[12px] text-red-300">
         {{ organizationsStore.error }}
       </div>
-      <div v-else class="text-[12px] text-muted-foreground px-1">
+      <div v-else class="px-[8px] pb-[4px] text-[12px] text-white/60">
         {{ $t('organizations.noOrganizations') }}
       </div>
     </div>
 
-    <!-- Collapsed view - just show icon with selected org initial -->
-    <div v-else class="flex justify-center">
-      <Button
-        variant="ghost"
-        size="icon"
-        class="h-8 w-8"
-        :title="organizationsStore.selectedOrganization?.name || 'All Organizations'"
+    <!-- Collapsed: a regular nav item on the shared icon axis -->
+    <div v-else class="rounded-2xl bg-white/[0.08] p-[4px]">
+      <button
+        type="button"
+        class="shell-nav-item btn-press justify-center !px-0"
+        :title="organizationsStore.selectedOrganization?.name || $t('organizations.organization')"
+        :aria-label="`${$t('organizations.organization')}: ${organizationsStore.selectedOrganization?.name ?? ''}`"
+        @click="emit('expand')"
       >
-        <Building2 class="h-4 w-4" />
-      </Button>
+        <Building2 class="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+      </button>
     </div>
   </div>
 

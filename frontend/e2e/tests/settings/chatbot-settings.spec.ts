@@ -329,6 +329,7 @@ test.describe('Tab Navigation', () => {
 
   test('should switch back to Messages tab', async () => {
     await chatbotSettingsPage.switchToAITab()
+    await chatbotSettingsPage.goto() // AI now lives in Integrations, a separate page
     await chatbotSettingsPage.switchToMessagesTab()
     await chatbotSettingsPage.expectMessagesTabVisible()
   })

@@ -58,6 +58,10 @@ export class OccurrencesPage extends BasePage {
   async gotoList() {
     await this.page.goto('/crm/occurrences')
     await this.page.waitForLoadState('networkidle')
+    // The CRM opens on the board by default; these tests start from the list.
+    // A repeat click on the active mode is a no-op, so this is idempotent.
+    await this.switchToList()
+    await this.page.waitForLoadState('networkidle')
   }
 
   async switchToBoard() {

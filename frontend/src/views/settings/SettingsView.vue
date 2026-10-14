@@ -12,11 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader, AuditLogPanel } from '@/components/shared'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
-import UnitsView from './UnitsView.vue'
-import DepartmentsView from './DepartmentsView.vue'
 import { resolveActiveTab, type SettingsTabConfig } from '@/lib/settings-tab-hub'
 import { toast } from 'vue-sonner'
-import { Settings, Loader2, Globe, Phone, Upload, Play, Pause, Music, Image as ImageIcon } from 'lucide-vue-next'
+import { Settings, Loader2, Globe, Phone, Upload, Play, Pause, Music, Image as ImageIcon, Bell } from 'lucide-vue-next'
 import { usersService, organizationService, brandingService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -25,23 +23,15 @@ const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-// Geral | Notificações | Chamadas | Unidades | Departamentos. Units and departments are
-// structural, system-wide catalogs (contacts, users, sales, X2...), so they live here and not
-// under Ocorrências. Each tab shows for its own read permission; the API stays the authority.
+// Geral | Notificações | Chamadas. Units and departments moved to Settings → Pessoas e acesso,
+// next to the users and teams that hang on them. The API stays the authority.
 const SETTINGS_TABS = ['general', 'notifications', 'calling']
 const tabConfigs: SettingsTabConfig[] = [
   { value: 'general', permission: 'settings.general' },
   { value: 'notifications', permission: 'settings.general' },
   { value: 'calling', permission: 'settings.general' },
-  { value: 'units', permission: 'units' },
-  { value: 'departments', permission: 'departments' },
 ]
-// The units/departments lists are served under occurrences:read (agents use them without
-// units:read/departments:read), so a tab is only useful to someone who also has that.
-const needsListAccess = ['units', 'departments']
-const canRead = (permission: string) =>
-  authStore.hasPermission(permission, 'read')
-  && (!needsListAccess.includes(permission) || authStore.hasPermission('occurrences', 'read'))
+const canRead = (permission: string) => authStore.hasPermission(permission, 'read')
 const canSee = (value: string) => {
   const tab = tabConfigs.find(c => c.value === value)
   return !!tab && canRead(tab.permission)
@@ -429,15 +419,14 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
 <template>
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
     <div v-if="!activeTab" class="p-6 text-sm text-white/50 light:text-gray-500">{{ $t('common.noAccessToSection') }}</div>
-    <Tabs v-else :model-value="activeTab" class="flex h-full min-h-0 w-full flex-col" @update:model-value="onTabChange">
-      <TabsList class="h-12 w-full shrink-0 justify-start gap-6 overflow-x-auto overflow-y-hidden rounded-none bg-transparent p-0 px-6 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.08)] [scrollbar-width:none] light:shadow-[inset_0_-1px_0_0_#e5e7eb] [&::-webkit-scrollbar]:hidden">
-        <TabsTrigger v-if="canSee('general')" value="general" class="h-12 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] text-white/50 shadow-none hover:text-white/80 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none light:text-gray-500 light:hover:text-gray-800 light:data-[state=active]:text-gray-900">{{ $t('settings.general') }}</TabsTrigger>
-        <TabsTrigger v-if="canSee('notifications')" value="notifications" class="h-12 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] text-white/50 shadow-none hover:text-white/80 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none light:text-gray-500 light:hover:text-gray-800 light:data-[state=active]:text-gray-900">{{ $t('settings.notifications') }}</TabsTrigger>
-        <TabsTrigger v-if="canSee('calling')" value="calling" class="h-12 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] text-white/50 shadow-none hover:text-white/80 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none light:text-gray-500 light:hover:text-gray-800 light:data-[state=active]:text-gray-900">{{ $t('settings.calling') }}</TabsTrigger>
-        <TabsTrigger v-if="canSee('units')" value="units" class="h-12 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] text-white/50 shadow-none hover:text-white/80 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none light:text-gray-500 light:hover:text-gray-800 light:data-[state=active]:text-gray-900">{{ $t('nav.units') }}</TabsTrigger>
-        <TabsTrigger v-if="canSee('departments')" value="departments" class="h-12 rounded-none border-b-2 border-transparent bg-transparent px-0 text-[13px] text-white/50 shadow-none hover:text-white/80 data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none light:text-gray-500 light:hover:text-gray-800 light:data-[state=active]:text-gray-900">{{ $t('nav.departments') }}</TabsTrigger>
+    <Tabs v-else :model-value="activeTab" orientation="vertical" class="flex h-full min-h-0 w-full" @update:model-value="onTabChange">
+      <TabsList class="page-rail">
+        <TabsTrigger v-if="canSee('general')" value="general" :title="$t('settings.general')" class="page-rail-item"><Settings class="h-5 w-5" aria-hidden="true" /><span class="page-rail-label">{{ $t('settings.general') }}</span></TabsTrigger>
+        <TabsTrigger v-if="canSee('notifications')" value="notifications" :title="$t('settings.notifications')" class="page-rail-item"><Bell class="h-5 w-5" aria-hidden="true" /><span class="page-rail-label">{{ $t('settings.notifications') }}</span></TabsTrigger>
+        <TabsTrigger v-if="canSee('calling')" value="calling" :title="$t('settings.calling')" class="page-rail-item"><Phone class="h-5 w-5" aria-hidden="true" /><span class="page-rail-label">{{ $t('settings.calling') }}</span></TabsTrigger>
       </TabsList>
 
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <template v-if="isSettingsTab">
     <PageHeader :title="$t('settings.title')" :subtitle="$t('settings.subtitle')" :icon="Settings" icon-gradient="bg-gradient-to-br from-gray-500 to-gray-600 shadow-gray-500/20" />
     <ScrollArea class="flex-1">
@@ -861,8 +850,7 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
     </ScrollArea>
       </template>
 
-      <TabsContent v-if="canSee('units')" value="units" class="mt-0 min-h-0 flex-1"><UnitsView /></TabsContent>
-      <TabsContent v-if="canSee('departments')" value="departments" class="mt-0 min-h-0 flex-1"><DepartmentsView /></TabsContent>
+      </div>
     </Tabs>
   </div>
 </template>
