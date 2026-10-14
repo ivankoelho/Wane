@@ -3897,7 +3897,13 @@
     "filterSeller": "Filter by seller",
     "allStores": "All stores",
     "allSellers": "All sellers",
-    "noSeller": "No seller"
+    "noSeller": "No seller",
+    "tabDashboard": "Dashboard",
+    "valueTotal": "Total",
+    "valueEmpty": "No values recorded in this period.",
+    "valueColStatus": "Status",
+    "valueColValue": "Value",
+    "valueColShare": "Share"
   },
   "occurrenceDocuments": {
     "sectionLabel": "Invoices and receipts",

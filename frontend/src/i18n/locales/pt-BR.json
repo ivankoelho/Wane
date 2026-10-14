@@ -3886,7 +3886,13 @@
     "filterSeller": "Filtrar por vendedor",
     "allStores": "Todas as lojas",
     "allSellers": "Todos os vendedores",
-    "noSeller": "Sem vendedor"
+    "noSeller": "Sem vendedor",
+    "tabDashboard": "Painel",
+    "valueTotal": "Total",
+    "valueEmpty": "Nenhum valor registrado no período.",
+    "valueColStatus": "Situação",
+    "valueColValue": "Valor",
+    "valueColShare": "Participação"
   },
   "occurrenceDocuments": {
     "sectionLabel": "Notas fiscais e cupons",
