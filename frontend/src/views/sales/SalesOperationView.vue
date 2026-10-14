@@ -331,26 +331,13 @@ onMounted(() => {
 
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <PageHeader :title="$t('sales.title')" :description="$t('sales.scope_' + scopeInfo.scope)" :icon="TrendingUp" icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20">
+        <!-- Filters and period sit next to the title, like Protocolos.
+             Store/seller only for supervisors/admins (sellers only see their own). -->
         <template #actions>
-          <DateRangePicker
-            v-model:selected-range="selectedRange"
-            v-model:custom-date-range="customDateRange"
-            v-model:is-date-picker-open="isDatePickerOpen"
-            :format-date-range-display="formatDateRangeDisplay"
-            @apply-custom="applyCustomRange"
-          />
-        </template>
-      </PageHeader>
-
-      <!-- Manual filters for supervisors/admins (sellers only see their own) -->
-      <div
-        v-if="scopeInfo.scope !== 'own'"
-        class="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-6 py-2.5 light:border-gray-200"
-        role="group"
-        :aria-label="$t('sales.filtersLabel')"
-      >
+          <div class="flex flex-wrap items-center justify-end gap-2" role="group" :aria-label="$t('sales.filtersLabel')">
+        <template v-if="scopeInfo.scope !== 'own'">
         <Select v-if="scopeInfo.units.length" v-model="unitFilter">
-          <SelectTrigger class="h-8 w-48 text-[13px]" :aria-label="$t('sales.filterStore')">
+          <SelectTrigger class="h-9 w-44 text-[13px]" :aria-label="$t('sales.filterStore')">
             <Store class="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <SelectValue />
           </SelectTrigger>
@@ -360,7 +347,7 @@ onMounted(() => {
           </SelectContent>
         </Select>
         <Select v-model="sellerFilter">
-          <SelectTrigger class="h-8 w-56 text-[13px]" :aria-label="$t('sales.filterSeller')">
+          <SelectTrigger class="h-9 w-52 text-[13px]" :aria-label="$t('sales.filterSeller')">
             <UserRound class="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <SelectValue />
           </SelectTrigger>
@@ -369,10 +356,20 @@ onMounted(() => {
             <SelectItem v-for="s in scopeInfo.sellers" :key="s.id" :value="s.id">{{ s.name }}</SelectItem>
           </SelectContent>
         </Select>
-        <Button v-if="hasFilters" variant="ghost" size="sm" class="h-8 text-[13px]" @click="clearFilters">
+        <Button v-if="hasFilters" variant="ghost" size="sm" class="h-9 text-[13px]" @click="clearFilters">
           <X class="mr-1 h-3.5 w-3.5" aria-hidden="true" />{{ $t('common.clear') }}
         </Button>
-      </div>
+        </template>
+          <DateRangePicker
+            v-model:selected-range="selectedRange"
+            v-model:custom-date-range="customDateRange"
+            v-model:is-date-picker-open="isDatePickerOpen"
+            :format-date-range-display="formatDateRangeDisplay"
+            @apply-custom="applyCustomRange"
+          />
+          </div>
+        </template>
+      </PageHeader>
 
       <TabsContent value="wallet" class="flex-1 min-h-0">
         <ErrorState
@@ -497,7 +494,9 @@ onMounted(() => {
               </div>
             </Card>
 
-            <Card class="overflow-hidden">
+            <!-- The Kanban sits straight on the page, no card behind it; the
+                 negative margin lines its columns up with the cards above. -->
+            <div class="-mx-4 -mb-4">
               <SalesOpportunityBoard
                 ref="boardRef"
                 :filters="filterParams"
@@ -507,7 +506,7 @@ onMounted(() => {
                 @direcionamento-change="handleDirecionamentoChange"
                 @details-change="handleDetailsChange"
               />
-            </Card>
+            </div>
           </div>
         </ScrollArea>
       </TabsContent>
