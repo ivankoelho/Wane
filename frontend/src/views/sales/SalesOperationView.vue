@@ -481,7 +481,7 @@ onMounted(() => {
 
       <!-- Quadro: the Kanban takes the whole area, like Protocolos -->
       <TabsContent value="board" class="mt-0 min-h-0 flex-1">
-        <div class="h-full overflow-y-auto">
+        <div class="h-full">
           <SalesOpportunityBoard
             ref="boardRef"
             :filters="filterParams"

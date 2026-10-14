@@ -213,7 +213,9 @@ defineExpose({ refresh: loadAll })
 </script>
 
 <template>
-  <div id="sales-opportunities-board" class="flex gap-3 overflow-x-auto p-4">
+  <!-- Fills its container's height: each column scrolls on its own, so the
+       board never ends short of the screen (it has a full tab to itself). -->
+  <div id="sales-opportunities-board" class="flex h-full gap-3 overflow-x-auto p-4">
     <div v-if="failed" class="p-3 text-center w-full">
       <p class="text-xs text-muted-foreground">{{ $t('sales.boardLoadFailed') }}</p>
       <Button variant="outline" size="sm" class="mt-2" @click="loadAll">{{ $t('common.retryLoad') }}</Button>
@@ -224,7 +226,7 @@ defineExpose({ refresh: loadAll })
         v-for="col in columns"
         :key="col.key"
         :data-board-column="col.key"
-        class="flex w-[288px] shrink-0 flex-col gap-2"
+        class="flex min-h-0 w-[288px] shrink-0 flex-col gap-2"
       >
         <!-- Stage band, same as the CRM board: tinted stage colour + solid underline -->
         <div
@@ -244,9 +246,9 @@ defineExpose({ refresh: loadAll })
           >{{ col.total }}</span>
         </div>
 
-        <!-- Fixed column height, own scrollbar — the board (and the page
-             around it) no longer grows with the column's content. -->
-        <div class="flex flex-1 flex-col gap-2 rounded-xl bg-muted/50 p-2 min-h-24 max-h-[65vh] overflow-y-auto">
+        <!-- Column fills the board's height with its own scrollbar — the board
+             (and the page around it) never grows with the column's content. -->
+        <div class="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-muted/50 p-2">
           <!-- flex-1 so the drop target always fills the column's free
                height, even with 0 items — it used to collapse to 0px tall
                when empty (a bare v-for renders no natural height), leaving
