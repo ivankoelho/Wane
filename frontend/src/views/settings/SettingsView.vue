@@ -16,6 +16,7 @@ import { resolveActiveTab, type SettingsTabConfig } from '@/lib/settings-tab-hub
 import { toast } from 'vue-sonner'
 import { Settings, Loader2, Globe, Phone, Upload, Play, Pause, Music, Image as ImageIcon, Bell } from 'lucide-vue-next'
 import { usersService, organizationService, brandingService } from '@/services/api'
+import { useBranding, type UiTheme } from '@/composables/useBranding'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
@@ -119,6 +120,28 @@ const logoInput = ref<HTMLInputElement | null>(null)
 const systemName = ref('')
 const isSavingSystemName = ref(false)
 
+// System theme (app shell for everyone) — super admin only, like the rest of
+// the branding cards. Saving also switches this session right away.
+const { setUiTheme } = useBranding()
+const UI_THEMES = ['bitrix', 'classic'] as const
+const uiThemeChoice = ref<UiTheme>('bitrix')
+const savedUiTheme = ref<UiTheme>('bitrix')
+const isSavingTheme = ref(false)
+async function saveUiTheme() {
+  isSavingTheme.value = true
+  try {
+    await brandingService.updateFooter({ ui_theme: uiThemeChoice.value })
+    savedUiTheme.value = uiThemeChoice.value
+    setUiTheme(uiThemeChoice.value)
+    toast.success(t('settings.uiThemeSaved'))
+    refreshActivityLog(generalLogKey)
+  } catch {
+    toast.error(t('settings.uiThemeSaveFailed'))
+  } finally {
+    isSavingTheme.value = false
+  }
+}
+
 const footerSettings = ref({ footer_text: '', footer_version: '' })
 const isSavingFooter = ref(false)
 
@@ -154,6 +177,7 @@ onMounted(async () => {
       const logo = data?.logo_url ?? null
       logoUrl.value = logo ? withBasePath(logo) : null
       systemName.value = data?.system_name ?? ''
+      uiThemeChoice.value = savedUiTheme.value = data?.ui_theme === 'classic' ? 'classic' : 'bitrix'
       footerSettings.value = {
         footer_text: data?.footer_text ?? '',
         footer_version: data?.footer_version ?? '',
@@ -541,6 +565,50 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
                     {{ $t('common.remove') }}
                   </Button>
                   <span class="text-xs text-white/30 light:text-gray-400">.jpg, .png, .webp (max 5MB)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- System Theme Card (super admin: system-wide, applies to every user) -->
+            <div v-if="isSuperAdmin" class="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200" data-testid="ui-theme-card">
+              <div class="p-6 pb-3">
+                <h3 class="text-lg font-semibold text-white light:text-gray-900">{{ $t('settings.uiTheme') }}</h3>
+                <p class="text-sm text-white/40 light:text-gray-500">{{ $t('settings.uiThemeDesc') }}</p>
+              </div>
+              <div class="p-6 pt-3 space-y-4">
+                <div class="grid gap-4 sm:grid-cols-2" role="radiogroup" :aria-label="$t('settings.uiTheme')">
+                  <button
+                    v-for="opt in UI_THEMES"
+                    :key="opt"
+                    type="button"
+                    role="radio"
+                    :aria-checked="uiThemeChoice === opt"
+                    :data-testid="'ui-theme-' + opt"
+                    class="rounded-xl border-2 p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :class="uiThemeChoice === opt ? 'border-primary bg-primary/5' : 'border-white/[0.08] hover:border-white/20 light:border-gray-200 light:hover:border-gray-300'"
+                    @click="uiThemeChoice = opt"
+                  >
+                    <!-- Miniature of each shell -->
+                    <div v-if="opt === 'bitrix'" class="flex h-24 gap-1.5 overflow-hidden rounded-lg bg-gradient-to-br from-emerald-700 to-teal-900 p-1.5" aria-hidden="true">
+                      <div class="w-5 space-y-1 rounded bg-white/15 p-1"><div v-for="i in 5" :key="i" class="h-1.5 rounded bg-white/50" /></div>
+                      <div class="flex flex-1 flex-col gap-1">
+                        <div class="flex gap-1"><div class="h-2 w-6 rounded bg-white/50" /><div class="h-2 w-6 rounded bg-white/25" /></div>
+                        <div class="flex-1 rounded bg-white" />
+                      </div>
+                    </div>
+                    <div v-else class="flex h-24 gap-1.5 overflow-hidden rounded-lg bg-gray-100 p-1.5" aria-hidden="true">
+                      <div class="w-9 space-y-1 rounded bg-white p-1 shadow-sm"><div v-for="i in 6" :key="i" class="h-1.5 rounded bg-gray-300" /></div>
+                      <div class="flex-1 rounded bg-white shadow-sm" />
+                    </div>
+                    <p class="mt-3 text-sm font-medium text-white light:text-gray-900">{{ $t(opt === 'bitrix' ? 'settings.uiThemeBitrix' : 'settings.uiThemeClassic') }}</p>
+                    <p class="text-xs text-white/50 light:text-gray-500">{{ $t(opt === 'bitrix' ? 'settings.uiThemeBitrixDesc' : 'settings.uiThemeClassicDesc') }}</p>
+                  </button>
+                </div>
+                <div class="flex justify-end">
+                  <Button size="sm" :disabled="isSavingTheme || uiThemeChoice === savedUiTheme" data-testid="ui-theme-save" @click="saveUiTheme">
+                    <Loader2 v-if="isSavingTheme" class="h-4 w-4 mr-2 animate-spin" />
+                    {{ $t('settings.uiThemeApply') }}
+                  </Button>
                 </div>
               </div>
             </div>

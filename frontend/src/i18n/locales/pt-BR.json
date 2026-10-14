@@ -751,7 +751,16 @@
     "themeLight": "Tema claro",
     "themeDark": "Tema escuro",
     "themeSystem": "Tema do sistema",
-    "themeColor": "Tema de cor"
+    "themeColor": "Tema de cor",
+    "uiTheme": "Tema do sistema",
+    "uiThemeDesc": "Define a moldura do sistema (menu, topo e fundo) para todos os usuários. O conteúdo das páginas é o mesmo nos dois temas.",
+    "uiThemeBitrix": "Bitrix",
+    "uiThemeBitrixDesc": "Plano de fundo, menu translúcido e abas no topo.",
+    "uiThemeClassic": "Clássico",
+    "uiThemeClassicDesc": "Menu lateral sólido com submenus, sem plano de fundo.",
+    "uiThemeApply": "Aplicar tema para todos",
+    "uiThemeSaved": "Tema do sistema atualizado para todos os usuários",
+    "uiThemeSaveFailed": "Não foi possível salvar o tema do sistema"
   },
   "users": {
     "title": "Gerenciamento de usuários",

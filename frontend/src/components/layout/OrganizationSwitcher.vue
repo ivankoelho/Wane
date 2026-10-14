@@ -17,9 +17,39 @@ import { organizationsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Building2, Plus, Loader2 } from 'lucide-vue-next'
 
-defineProps<{
+const props = defineProps<{
   collapsed?: boolean
+  /** glass: white-on-wallpaper (Bitrix theme, default); plain: the classic
+   *  theme's solid sidebar, following light/dark like the rest of the page. */
+  variant?: 'glass' | 'plain'
 }>()
+
+// One template, two looks — the class map is the only thing the theme changes.
+const ui = computed(() => props.variant === 'plain'
+  ? {
+      wrap: 'px-2 py-2 border-b',
+      panel: 'space-y-1',
+      head: 'flex items-center justify-between',
+      label: 'text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-1',
+      add: 'flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground',
+      trigger: 'h-8 text-[13px]',
+      note: 'text-[12px] text-muted-foreground px-1',
+      error: 'text-[12px] text-destructive px-1',
+      collapsedWrap: 'flex justify-center',
+      collapsedBtn: 'flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground',
+    }
+  : {
+      wrap: 'px-[14px] pb-[8px]',
+      panel: 'space-y-[6px] rounded-2xl bg-white/[0.08] p-[4px]',
+      head: 'flex items-center justify-between pl-[8px] pr-[2px] pt-[2px]',
+      label: 'text-[11px] font-medium text-white/60',
+      add: 'flex h-6 w-6 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white',
+      trigger: 'h-9 rounded-xl border-white/20 bg-white/15 text-[13px] text-white [&>svg]:text-white/70',
+      note: 'px-[8px] pb-[4px] text-[12px] text-white/60',
+      error: 'px-[8px] pb-[4px] text-[12px] text-red-300',
+      collapsedWrap: 'rounded-2xl bg-white/[0.08] p-[4px]',
+      collapsedBtn: 'shell-nav-item btn-press justify-center !px-0',
+    })
 
 // Collapsed, there is no room for the picker: the icon opens the sidebar instead.
 const emit = defineEmits<{ expand: [] }>()
@@ -120,18 +150,18 @@ const refreshOrgs = async () => {
 </script>
 
 <template>
-  <!-- Same 14px inset and frosted group as the nav sections below, so the
-       icon and label line up with every other sidebar item. -->
-  <div v-if="shouldShowSwitcher" class="px-[14px] pb-[8px]">
-    <div v-if="!collapsed" class="space-y-[6px] rounded-2xl bg-white/[0.08] p-[4px]">
-      <div class="flex items-center justify-between pl-[8px] pr-[2px] pt-[2px]">
-        <span class="text-[11px] font-medium text-white/60">
+  <!-- glass: same 14px inset and frosted group as the Bitrix nav sections, so
+       the icon and label line up with every other sidebar item. -->
+  <div v-if="shouldShowSwitcher" :class="ui.wrap">
+    <div v-if="!collapsed" :class="ui.panel">
+      <div :class="ui.head">
+        <span :class="ui.label">
           {{ $t('organizations.organization') }}
         </span>
         <button
           v-if="canCreateOrg"
           type="button"
-          class="flex h-6 w-6 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/15 hover:text-white"
+          :class="ui.add"
           :aria-label="t('organizations.createTitle')"
           :title="t('organizations.createTitle')"
           @click="isCreateDialogOpen = true"
@@ -144,7 +174,7 @@ const refreshOrgs = async () => {
         :model-value="currentOrgId"
         @update:model-value="handleOrgChange"
       >
-        <SelectTrigger class="h-9 rounded-xl border-white/20 bg-white/15 text-[13px] text-white [&>svg]:text-white/70">
+        <SelectTrigger :class="ui.trigger">
           <SelectValue :placeholder="$t('organizations.selectOrganization')" />
         </SelectTrigger>
         <SelectContent>
@@ -160,22 +190,22 @@ const refreshOrgs = async () => {
           </SelectItem>
         </SelectContent>
       </Select>
-      <div v-else-if="organizationsStore.loading" class="px-[8px] pb-[4px] text-[12px] text-white/60">
+      <div v-else-if="organizationsStore.loading" :class="ui.note">
         {{ $t('organizations.loading') }}
       </div>
-      <div v-else-if="organizationsStore.error" class="px-[8px] pb-[4px] text-[12px] text-red-300">
+      <div v-else-if="organizationsStore.error" :class="ui.error">
         {{ organizationsStore.error }}
       </div>
-      <div v-else class="px-[8px] pb-[4px] text-[12px] text-white/60">
+      <div v-else :class="ui.note">
         {{ $t('organizations.noOrganizations') }}
       </div>
     </div>
 
     <!-- Collapsed: a regular nav item on the shared icon axis -->
-    <div v-else class="rounded-2xl bg-white/[0.08] p-[4px]">
+    <div v-else :class="ui.collapsedWrap">
       <button
         type="button"
-        class="shell-nav-item btn-press justify-center !px-0"
+        :class="ui.collapsedBtn"
         :title="organizationsStore.selectedOrganization?.name || $t('organizations.organization')"
         :aria-label="`${$t('organizations.organization')}: ${organizationsStore.selectedOrganization?.name ?? ''}`"
         @click="emit('expand')"

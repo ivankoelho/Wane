@@ -787,6 +787,8 @@ export const brandingService = {
     system_name: string | null
     footer_text: string | null
     footer_version: string | null
+    /** System theme (app shell) for every user; never null. */
+    ui_theme: 'bitrix' | 'classic'
   }>>('/branding'),
   uploadLoginBackground: (file: File) => {
     const formData = new FormData()
@@ -804,8 +806,8 @@ export const brandingService = {
     })
   },
   deleteLogo: () => api.delete('/branding/logo'),
-  updateFooter: (data: { system_name?: string; footer_text?: string; footer_version?: string }) =>
-    api.put<ApiEnvelope<{ system_name: string; footer_text: string; footer_version: string }>>('/branding/footer', data),
+  updateFooter: (data: { system_name?: string; footer_text?: string; footer_version?: string; ui_theme?: 'bitrix' | 'classic' }) =>
+    api.put<ApiEnvelope<{ system_name: string; footer_text: string; footer_version: string; ui_theme: string }>>('/branding/footer', data),
 }
 
 // Organizations

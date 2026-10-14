@@ -764,7 +764,16 @@
     "themeLight": "Light theme",
     "themeDark": "Dark theme",
     "themeSystem": "System theme",
-    "themeColor": "Color theme"
+    "themeColor": "Color theme",
+    "uiTheme": "System theme",
+    "uiThemeDesc": "Sets the app shell (menu, top bar and background) for every user. Page contents are the same in both themes.",
+    "uiThemeBitrix": "Bitrix",
+    "uiThemeBitrixDesc": "Wallpaper, translucent menu and top tabs.",
+    "uiThemeClassic": "Classic",
+    "uiThemeClassicDesc": "Solid sidebar with submenus, no wallpaper.",
+    "uiThemeApply": "Apply theme for everyone",
+    "uiThemeSaved": "System theme updated for every user",
+    "uiThemeSaveFailed": "Could not save the system theme"
   },
   "users": {
     "title": "User Management",

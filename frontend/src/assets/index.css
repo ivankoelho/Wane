@@ -754,6 +754,30 @@
   text-align: center;
 }
 
+/* Sidebar active indicator bar (Clássico theme shell, ClassicLayout.vue) */
+.nav-active-indicator {
+  position: relative;
+}
+
+.nav-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  height: 50%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: hsl(var(--primary));
+  opacity: 0;
+  transform: scaleY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.nav-active-indicator[data-active="true"]::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
