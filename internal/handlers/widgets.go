@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -119,8 +120,9 @@ type DataPoint struct {
 
 // Available data sources and their filterable fields
 var widgetDataSources = map[string][]string{
-	"messages":    {"status", "direction", "message_type", "whatsapp_account"},
-	"contacts":    {"whatsapp_account", "is_read"},
+	"messages": {"status", "direction", "message_type", "whatsapp_account"},
+	// region is computed from the phone's DDD (see getContactsByRegion); it is not a column.
+	"contacts":    {"whatsapp_account", "is_read", "region"},
 	"campaigns":   {"status", "message_status"},
 	"transfers":   {"status", "source"},
 	"sessions":    {"status"},
@@ -485,6 +487,11 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 	case "chart":
 		gridW = 6
 		gridH = 5
+		if req.ChartType == "map" {
+			// The tile map is roughly square: a short card makes the tiles unreadable.
+			gridW = 5
+			gridH = 9
+		}
 	case "table", "shortcuts":
 		gridW = 6
 		gridH = 8
@@ -1431,6 +1438,11 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 		return a.getCampaignMessageStatusData(orgID, filters, start, end)
 	}
 
+	// region is derived from the phone number, not stored, so it has its own query.
+	if widget.DataSource == "contacts" && widget.GroupByField == "region" {
+		return a.getContactsByRegion(orgID, filters, start, end)
+	}
+
 	tableName, dateField, ok := resolveDataSourceTable(widget.DataSource)
 	if !ok {
 		return dataPoints
@@ -1485,6 +1497,57 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 	}
 
 	return dataPoints
+}
+
+// getContactsByRegion counts contacts per Brazilian state (UF), for the heat map.
+//
+// The state comes from the DDD of the phone number: contacts carry no address.
+// It is therefore state-level only, and a number from another country (or not a
+// well-formed BR number) is counted under "OUTROS". The period uses the same
+// date field as every other contacts widget (last_message_at), so the numbers
+// agree with the rest of the dashboard.
+func (a *App) getContactsByRegion(orgID uuid.UUID, filters []FilterInput, start, end time.Time) []DataPoint {
+	inner := `SELECT regexp_replace(phone_number, 'D', '', 'g') AS digits
+		FROM contacts
+		WHERE organization_id = ? AND deleted_at IS NULL AND last_message_at >= ? AND last_message_at <= ?`
+	args := []any{orgID, start, end}
+	inner, args = appendFilterSQL("contacts", inner, args, filters)
+
+	// The pattern mirrors brazilNumber in region_br.go; keep the two in sync.
+	query := `SELECT CASE WHEN digits ~ '^55[1-9][0-9]([2-9][0-9]{7}|9[0-9]{8})$' THEN substr(digits, 3, 2) ELSE '' END AS ddd,
+		COUNT(*) AS value
+		FROM (` + inner + `) c
+		GROUP BY 1`
+
+	var rows []struct {
+		DDD   string
+		Value int64
+	}
+	if err := a.DB.Raw(query, args...).Scan(&rows).Error; err != nil {
+		a.Log.Error("Failed to group contacts by region", "error", err, "org_id", orgID)
+		return []DataPoint{}
+	}
+
+	byState := make(map[string]int64)
+	for _, r := range rows {
+		uf, ok := brazilStateByDDD[r.DDD]
+		if !ok {
+			uf = regionOther
+		}
+		byState[uf] += r.Value
+	}
+
+	points := make([]DataPoint, 0, len(byState))
+	for uf, n := range byState {
+		points = append(points, DataPoint{Label: uf, Value: float64(n)})
+	}
+	sort.Slice(points, func(i, j int) bool {
+		if points[i].Value != points[j].Value {
+			return points[i].Value > points[j].Value
+		}
+		return points[i].Label < points[j].Label
+	})
+	return points
 }
 
 // getCampaignMessageStatusData returns sent/delivered/read/failed totals from campaign counters
