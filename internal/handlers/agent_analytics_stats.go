@@ -13,9 +13,18 @@ import (
 // single-agent and all-agents paths both go through it.
 //
 // Metric semantics:
-//   - TransfersHandled: attendances closed (status resumed) by the agent, in the
-//     period. The closer is resumed_by; rows without it fall back to the owner.
-//     Auto-closed (expired) attendances are not "handled".
+//   - TransfersHandled: attendances closed (status resumed) that the agent owned
+//     when they were closed. Closing never touches agent_id (only status,
+//     resumed_at and resumed_by; releasing to the queue is limited to active
+//     rows), so agent_id is the owner at the moment of closing. resumed_by is the
+//     closer, who may be a supervisor, and is used only as a fallback for an
+//     attendance closed with no owner. Auto-closed (expired) attendances are not
+//     "handled". "Closed by others" is a separate figure, left for the panel.
+//   - SLAAtRisk: escalated (level >= 1), not breached, AND the customer is waiting
+//     for the agent right now. escalation_level is never reset when the agent
+//     answers, so the level alone would keep flagging answered conversations.
+//   - SLABreached: the attendance breached its SLA at some point. It is a
+//     historical record and is kept after the agent answers ("SLA violado").
 //   - AvgFirstResponseMins: transferred_at -> first_response_at, over the
 //     attendances the agent owns in the period that already have a response.
 //   - MessagesSent: outgoing messages sent by the agent (sent_by_user_id) in the
@@ -56,11 +65,11 @@ func (a *App) calculateStatsFor(orgID uuid.UUID, agentIDs []uuid.UUID, start, en
 		AvgResolution *float64
 	}
 	if err := a.DB.Model(&models.AgentTransfer{}).
-		Select("COALESCE(resumed_by, agent_id) AS agent_id, COUNT(*) AS count, "+
+		Select("COALESCE(agent_id, resumed_by) AS agent_id, COUNT(*) AS count, "+
 			"AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) FILTER (WHERE resumed_at IS NOT NULL) AS avg_resolution").
-		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ? AND COALESCE(resumed_by, agent_id) IN ?",
+		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ? AND COALESCE(agent_id, resumed_by) IN ?",
 			orgID, models.TransferStatusResumed, start, end, agentIDs).
-		Group("COALESCE(resumed_by, agent_id)").
+		Group("COALESCE(agent_id, resumed_by)").
 		Scan(&handled).Error; err != nil {
 		a.Log.Error("Failed to compute handled transfers", "error", err, "org_id", orgID)
 	}
@@ -106,7 +115,7 @@ SELECT t.agent_id,
        COUNT(*) AS active,
        COUNT(*) FILTER (WHERE lm.direction = ?) AS awaiting_agent,
        COUNT(*) FILTER (WHERE lm.direction = ? AND lm.sent_by_user_id IS NOT NULL) AS awaiting_customer,
-       COUNT(*) FILTER (WHERE NOT t.sla_breached AND t.escalation_level >= 1) AS sla_at_risk,
+       COUNT(*) FILTER (WHERE NOT t.sla_breached AND t.escalation_level >= 1 AND lm.direction = ?) AS sla_at_risk,
        COUNT(*) FILTER (WHERE t.sla_breached) AS sla_breached
 FROM agent_transfers t
 LEFT JOIN LATERAL (
@@ -119,7 +128,7 @@ LEFT JOIN LATERAL (
 ) lm ON true
 WHERE t.organization_id = ? AND t.status = ? AND t.agent_id IN ? AND t.deleted_at IS NULL
 GROUP BY t.agent_id`,
-		models.DirectionIncoming, models.DirectionOutgoing, orgID, models.TransferStatusActive, agentIDs).
+		models.DirectionIncoming, models.DirectionOutgoing, models.DirectionIncoming, orgID, models.TransferStatusActive, agentIDs).
 		Scan(&active).Error; err != nil {
 		a.Log.Error("Failed to compute active transfers", "error", err, "org_id", orgID)
 	}

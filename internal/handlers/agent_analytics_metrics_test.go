@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+// metricsPhoneSeq makes every contact of the metrics tests unique.
+var metricsPhoneSeq atomic.Int64
 
 // metricsEnv is an organization with a viewer allowed to see every agent.
 type metricsEnv struct {
@@ -81,7 +85,10 @@ func (e metricsEnv) message(t *testing.T, contactID uuid.UUID, dir models.Direct
 // transfer creates a transfer for a fresh contact.
 func (e metricsEnv) transfer(t *testing.T, agentID *uuid.UUID, status models.TransferStatus, transferredAt time.Time, resumedAt *time.Time) (*models.AgentTransfer, *models.Contact) {
 	t.Helper()
-	contact := testutil.CreateTestContact(t, e.app.DB, e.org.ID)
+	// CreateTestContact draws 4 hex digits for the phone: with a few hundred
+	// contacts in one organization it collides, so the number is sequential here.
+	contact := testutil.CreateTestContactWith(t, e.app.DB, e.org.ID,
+		testutil.WithPhoneNumber(fmt.Sprintf("+5511%09d", metricsPhoneSeq.Add(1))))
 	return createTestAgentTransfer(t, e.app, e.org.ID, contact.ID, agentID, status, models.TransferSourceManual, transferredAt, resumedAt), contact
 }
 
@@ -120,24 +127,37 @@ func TestAgentAnalytics_MessagesSentAreAttributedToTheSender(t *testing.T) {
 	assert.EqualValues(t, 1, e.statsOf(t, bia.ID).MessagesSent)
 }
 
-// The agent who closed an attendance gets the credit, regardless of who owns
-// it at the end; an auto-closed (expired) attendance is nobody's resolution.
-func TestAgentAnalytics_ResolvedIsCreditedToTheCloser(t *testing.T) {
+// The resolution is credited to whoever owned the attendance when it was
+// closed. The closer (resumed_by) can be a supervisor and is only a fallback
+// for an attendance closed with no owner; an auto-closed (expired) attendance
+// is nobody's resolution.
+func TestAgentAnalytics_ResolvedIsCreditedToTheOwnerAtClose(t *testing.T) {
 	e := newMetricsEnv(t)
 	ana, bia := e.agent(t), e.agent(t)
 	now := time.Now()
 	resumed := now.Add(-10 * time.Minute)
+	closedBy := func(tr *models.AgentTransfer, closer uuid.UUID) {
+		t.Helper()
+		require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", tr.ID).Update("resumed_by", closer).Error)
+	}
 
-	// Ana handled it, then it moved to Bia, who closed it.
+	// Bia owns it; a supervisor (not an agent of any team) closes it.
 	tr, _ := e.transfer(t, &bia.ID, models.TransferStatusResumed, now.Add(-2*time.Hour), &resumed)
-	require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", tr.ID).Update("resumed_by", bia.ID).Error)
-	// Legacy row without resumed_by: falls back to the owner.
-	e.transfer(t, &ana.ID, models.TransferStatusResumed, now.Add(-2*time.Hour), &resumed)
-	// Auto-closed by SLA: not handled by anyone.
+	closedBy(tr, e.viewer.ID)
+	// Ana owns it and closes it herself.
+	tr, _ = e.transfer(t, &ana.ID, models.TransferStatusResumed, now.Add(-2*time.Hour), &resumed)
+	closedBy(tr, ana.ID)
+	// Reassigned to Bia, who owns it at the closing and closes it.
+	tr, _ = e.transfer(t, &bia.ID, models.TransferStatusResumed, now.Add(-2*time.Hour), &resumed)
+	closedBy(tr, bia.ID)
+	// Closed from the queue, with no owner: the closer is the fallback.
+	tr, _ = e.transfer(t, nil, models.TransferStatusResumed, now.Add(-2*time.Hour), &resumed)
+	closedBy(tr, ana.ID)
+	// Closed by the SLA: nobody resolved it, whoever owned it.
 	e.transfer(t, &ana.ID, models.TransferStatusExpired, now.Add(-2*time.Hour), &resumed)
 
-	assert.EqualValues(t, 1, e.statsOf(t, bia.ID).TransfersHandled)
-	assert.EqualValues(t, 1, e.statsOf(t, ana.ID).TransfersHandled)
+	assert.EqualValues(t, 2, e.statsOf(t, ana.ID).TransfersHandled, "own close + fallback for the unowned one")
+	assert.EqualValues(t, 2, e.statsOf(t, bia.ID).TransfersHandled, "the supervisor's close and the reassigned one stay with the owner")
 }
 
 // Active attendances are split by who they wait for; "active" alone says
@@ -168,22 +188,51 @@ func TestAgentAnalytics_ActiveAttendancesAreSplitByWhoIsWaiting(t *testing.T) {
 	assert.EqualValues(t, 1, s.AwaitingCustomer)
 }
 
-// SLA counters follow the SLA the processor already maintains.
-func TestAgentAnalytics_SLACounters(t *testing.T) {
-	e := newMetricsEnv(t)
-	agent := e.agent(t)
-	now := time.Now()
+// SLA at risk means: escalated, not breached AND the customer is waiting now.
+// The escalation level is never reset when the agent answers, so it is not
+// enough by itself; the breach is a historical record and survives the reply.
+func TestAgentAnalytics_SLARiskAndBreach(t *testing.T) {
+	run := func(t *testing.T, level int, breached, customerWaiting bool) handlers.AgentPerformanceStats {
+		t.Helper()
+		e := newMetricsEnv(t)
+		agent := e.agent(t)
+		now := time.Now()
+		tr, c := e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
+		require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", tr.ID).
+			Updates(map[string]any{"escalation_level": level, "sla_breached": breached}).Error)
+		if customerWaiting {
+			e.message(t, c.ID, models.DirectionOutgoing, now.Add(-50*time.Minute), &agent.ID)
+			e.message(t, c.ID, models.DirectionIncoming, now.Add(-5*time.Minute), nil)
+		} else {
+			e.message(t, c.ID, models.DirectionIncoming, now.Add(-50*time.Minute), nil)
+			e.message(t, c.ID, models.DirectionOutgoing, now.Add(-5*time.Minute), &agent.ID)
+		}
+		return e.statsOf(t, agent.ID)
+	}
 
-	risk, _ := e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
-	require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", risk.ID).Update("escalation_level", 1).Error)
-	late, _ := e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
-	require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", late.ID).
-		Updates(map[string]any{"escalation_level": 2, "sla_breached": true}).Error)
-	e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
+	t.Run("escalated, customer waiting: at risk", func(t *testing.T) {
+		s := run(t, 1, false, true)
+		assert.EqualValues(t, 1, s.SLAAtRisk)
+		assert.EqualValues(t, 0, s.SLABreached)
+	})
+	t.Run("escalated, agent already answered: not at risk", func(t *testing.T) {
+		s := run(t, 1, false, false)
+		assert.EqualValues(t, 0, s.SLAAtRisk)
+		assert.EqualValues(t, 0, s.SLABreached)
+	})
+	t.Run("not escalated, customer waiting: not at risk", func(t *testing.T) {
+		s := run(t, 0, false, true)
+		assert.EqualValues(t, 0, s.SLAAtRisk)
+	})
+	t.Run("breached stays recorded after the agent answers and is not also at risk", func(t *testing.T) {
+		waiting := run(t, 2, true, true)
+		assert.EqualValues(t, 1, waiting.SLABreached)
+		assert.EqualValues(t, 0, waiting.SLAAtRisk, "a breached attendance is counted as breached, not as at risk")
 
-	s := e.statsOf(t, agent.ID)
-	assert.EqualValues(t, 1, s.SLAAtRisk, "warning level and not breached")
-	assert.EqualValues(t, 1, s.SLABreached)
+		answered := run(t, 2, true, false)
+		assert.EqualValues(t, 1, answered.SLABreached, "the breach is historical")
+		assert.EqualValues(t, 0, answered.SLAAtRisk)
+	})
 }
 
 // The number of queries must not grow with the number of agents.
@@ -212,14 +261,23 @@ func TestAgentAnalytics_QueryCountDoesNotGrowWithAgents(t *testing.T) {
 		return queries.Load()
 	}
 
-	addAgent()
-	addAgent()
-	e.analytics(t) // warm the permission cache so only the metric queries are compared
-	few := measure()
-	for range 8 {
-		addAgent()
+	// The whole endpoint is measured (auth, summary, trend and per-agent stats).
+	// Agents are added cumulatively and the count taken at 5, 50 and 200.
+	sizes := []int{5, 50, 200}
+	have := 0
+	var counts []int64
+	for _, size := range sizes {
+		for ; have < size; have++ {
+			addAgent()
+		}
+		e.analytics(t) // warm the permission cache so only the metric queries are compared
+		counts = append(counts, measure())
+		t.Logf("%3d agents -> %d queries", size, counts[len(counts)-1])
 	}
-	many := measure()
 
-	assert.Equal(t, few, many, "queries must not depend on the number of agents (2 agents: %d, 10 agents: %d)", few, many)
+	for i := 1; i < len(counts); i++ {
+		assert.Equal(t, counts[0], counts[i],
+			"queries must not depend on the number of agents (%d agents: %d, %d agents: %d)",
+			sizes[0], counts[0], sizes[i], counts[i])
+	}
 }

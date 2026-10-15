@@ -32,15 +32,17 @@ type AgentPerformanceStats struct {
 	// ActiveTransfers split by who the attendance is waiting for (see
 	// calculateStatsFor). Both can be below ActiveTransfers: an attendance with
 	// no message since it started is in neither.
-	AwaitingAgent    int64   `json:"awaiting_agent"`
-	AwaitingCustomer int64   `json:"awaiting_customer"`
-	SLAAtRisk        int64   `json:"sla_at_risk"`
-	SLABreached      int64   `json:"sla_breached"`
-	MessagesSent     int64   `json:"messages_sent"`
-	TotalBreakTimeMins   float64 `json:"total_break_time_mins"`
-	BreakCount           int64   `json:"break_count"`
-	IsAvailable          bool    `json:"is_available"`
-	CurrentBreakStart    *string `json:"current_break_start,omitempty"`
+	AwaitingAgent    int64 `json:"awaiting_agent"`
+	AwaitingCustomer int64 `json:"awaiting_customer"`
+	// SLAAtRisk: escalated, not breached and the customer is waiting right now.
+	// SLABreached: breached at some point (historical, "SLA violado").
+	SLAAtRisk          int64   `json:"sla_at_risk"`
+	SLABreached        int64   `json:"sla_breached"`
+	MessagesSent       int64   `json:"messages_sent"`
+	TotalBreakTimeMins float64 `json:"total_break_time_mins"`
+	BreakCount         int64   `json:"break_count"`
+	IsAvailable        bool    `json:"is_available"`
+	CurrentBreakStart  *string `json:"current_break_start,omitempty"`
 }
 
 // TrendPoint represents a data point for time-series charts
@@ -284,7 +286,6 @@ func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summa
 		summary.TransfersBySource[sc.Source] = sc.Count
 	}
 }
-
 
 func (a *App) calculateTrendData(orgID uuid.UUID, start, end time.Time, groupBy string, agentID *uuid.UUID) []TrendPoint {
 	var dateFormat string
