@@ -194,3 +194,8 @@ func (a *App) LoadChatChannelForTest(orgID, channelID uuid.UUID) (*models.ChatCh
 func (a *App) CanDeleteChatMessageForTest(userID, orgID uuid.UUID, msg *models.ChatMessage, ch *models.ChatChannel) bool {
 	return a.canDeleteChatMessage(userID, orgID, msg, ch)
 }
+
+// ReassignAwayTransferForTest exposes reassignAwayTransfer.
+func (a *App) ReassignAwayTransferForTest(t *models.AgentTransfer, awayAgent uuid.UUID, event string) bool {
+	return a.reassignAwayTransfer(t, awayAgent, event)
+}

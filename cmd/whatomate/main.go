@@ -20,9 +20,9 @@ import (
 	"github.com/shridarpatil/whatomate/internal/handlers"
 	"github.com/shridarpatil/whatomate/internal/middleware"
 	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/internal/usage"
 	"github.com/shridarpatil/whatomate/internal/storage"
 	"github.com/shridarpatil/whatomate/internal/tts"
+	"github.com/shridarpatil/whatomate/internal/usage"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
@@ -325,8 +325,12 @@ func runServer(args []string) {
 	// Presence reaper: releases an agent's attendances only after they stay
 	// disconnected past the grace period (reconnects within it change nothing).
 	presenceReaper := handlers.NewPresenceReaper(app, handlers.DefaultPresenceGrace, 10*time.Second)
+	// A restart drops every connection at once: close the open presence intervals
+	// before the hub accepts connections instead of recording a mass "offline".
+	app.ResetPresenceLogOnBoot()
 	wsHub.SetPresenceListener(func(orgID, userID uuid.UUID, online bool) {
 		presenceReaper.OnPresenceChange(orgID, userID, online)
+		app.RecordPresence(orgID, userID)
 		app.BroadcastAgentPresence(orgID, userID, online)
 	})
 

@@ -100,6 +100,8 @@ func runMigrations(db *gorm.DB) error {
 		&models.Webhook{},
 		&models.CustomAction{},
 		&models.UserAvailabilityLog{},
+		&models.AgentPresenceLog{},
+		&models.AgentTransferAssignment{},
 		// WhatsApp models
 		&models.WhatsAppAccount{},
 		&models.Contact{},

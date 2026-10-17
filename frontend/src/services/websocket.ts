@@ -293,11 +293,11 @@ class WebSocketService {
           this.handleAgentTransferAssign(message.payload)
           break
         case WS_TYPE_AGENT_PRESENCE:
-          useUsersStore().applyPresence(message.payload.user_id, !!message.payload.online)
+          useUsersStore().applyPresence(message.payload.user_id, !!message.payload.online, message.payload.state, message.payload.since)
           useTeamChatStore().applyPresence(message.payload.user_id, !!message.payload.online)
           break
         case WS_TYPE_AGENT_AVAILABILITY:
-          useUsersStore().applyAvailability(message.payload.user_id, !!message.payload.is_available)
+          useUsersStore().applyAvailability(message.payload.user_id, !!message.payload.is_available, message.payload.state, message.payload.since)
           // Another tab/device of this same user toggled it: keep this tab's
           // toggle in step with the backend instead of showing a stale state.
           if (message.payload.user_id === useAuthStore().user?.id) {
