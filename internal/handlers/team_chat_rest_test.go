@@ -440,3 +440,27 @@ func TestChatUnread_DMAndFreeChannelBaselineIsJoinTime(t *testing.T) {
 	assert.EqualValues(t, 1, bList[0].UnreadCount)
 	assert.EqualValues(t, 0, listChannels(t, app, org.ID, a.ID)[0].UnreadCount)
 }
+
+func TestChatListUsers(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	other := testutil.CreateTestOrganization(t, app.DB)
+	me := chatUser(t, app, org.ID, chatUserKeys)
+	peer := chatUser(t, app, org.ID, chatUserKeys)
+	testutil.CreateTestUser(t, app.DB, other.ID) // another organization: never listed
+	inactive := chatUser(t, app, org.ID, chatUserKeys)
+	require.NoError(t, app.DB.Model(inactive).Update("is_active", false).Error)
+
+	code, raw := chatDo(t, app.ListChatUsers, org.ID, me.ID, nil, nil, nil)
+	require.Equal(t, fasthttp.StatusOK, code)
+	data := decodeChat[struct {
+		Users []handlers.ChatUserResponse `json:"users"`
+	}](t, raw)
+	require.Len(t, data.Users, 1, "only active people of my organization, not myself")
+	assert.Equal(t, peer.ID, data.Users[0].ID)
+	assert.NotContains(t, string(raw), "@", "no e-mail leaves the server")
+
+	noChat := chatUser(t, app, org.ID, []string{"contacts:read"})
+	code, _ = chatDo(t, app.ListChatUsers, org.ID, noChat.ID, nil, nil, nil)
+	assert.Equal(t, fasthttp.StatusForbidden, code)
+}

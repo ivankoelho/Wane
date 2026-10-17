@@ -681,3 +681,52 @@ func (a *App) MarkChatChannelRead(r *fastglue.Request) error {
 	a.notifyChatRead(orgID, userID, ch)
 	return r.SendEnvelope(map[string]any{"unread_count": 0})
 }
+
+// ChatUserResponse is one person in the picker for DMs and channel members.
+type ChatUserResponse struct {
+	ID       uuid.UUID `json:"id"`
+	FullName string    `json:"full_name"`
+	IsOnline bool      `json:"is_online"`
+}
+
+// ListChatUsers returns the active users of the caller's organization (minus the
+// caller) so a chat-only agent can pick someone to talk to without holding
+// users:read. Only id and display name leave the server, never e-mail or role.
+// Presence is the hub's, the same source as everywhere else.
+func (a *App) ListChatUsers(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceTeamChat, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+	q := a.DB.Model(&models.User{}).
+		Joins("JOIN user_organizations uo ON uo.user_id = users.id AND uo.organization_id = ? AND uo.deleted_at IS NULL", orgID).
+		Where("users.is_active = true AND users.id <> ?", userID)
+	if s := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("q"))); s != "" {
+		q = q.Where("users.full_name ILIKE ?", "%"+s+"%")
+	}
+	var users []models.User
+	if err := q.Select("users.id", "users.full_name", "users.email").
+		Order("users.full_name ASC").Limit(200).Find(&users).Error; err != nil {
+		a.Log.Error("Failed to list chat users", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list users", nil, "")
+	}
+	ids := make([]uuid.UUID, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	online := map[uuid.UUID]bool{}
+	if a.WSHub != nil {
+		for _, id := range a.WSHub.FilterOnlineUsers(orgID, ids) {
+			online[id] = true
+		}
+	}
+	out := make([]ChatUserResponse, len(users))
+	for i, u := range users {
+		name := u.FullName
+		if name == "" {
+			name = u.Email
+		}
+		out[i] = ChatUserResponse{ID: u.ID, FullName: name, IsOnline: online[u.ID]}
+	}
+	return r.SendEnvelope(map[string]any{"users": out})
+}

@@ -1105,6 +1105,57 @@ export const notesService = {
     api.delete(`/contacts/${contactId}/notes/${noteId}`)
 }
 
+// Internal chat (team_chat). The server decides who can see what: every id sent
+// here is checked again there, and an inaccessible channel answers 404.
+export type TeamChatChannelKind = 'team' | 'channel' | 'dm'
+
+export interface TeamChatChannel {
+  id: string
+  kind: TeamChatChannelKind
+  name: string
+  team_id?: string
+  dm_user_id?: string
+  unread_count: number
+  last_message_at?: string
+  created_at: string
+}
+
+export interface TeamChatMessage {
+  id: string
+  channel_id: string
+  user_id: string
+  user_name: string
+  body: string
+  parent_id?: string
+  context_type?: string
+  context_id?: string
+  created_at: string
+  edited_at?: string
+}
+
+export interface TeamChatUser {
+  id: string
+  full_name: string
+  is_online: boolean
+}
+
+export const teamChatService = {
+  channels: () => api.get<{ channels: TeamChatChannel[] }>('/team-chat/channels'),
+  users: (q?: string) => api.get<{ users: TeamChatUser[] }>('/team-chat/users', { params: q ? { q } : undefined }),
+  createChannel: (data: { name: string; member_ids?: string[] }) =>
+    api.post<TeamChatChannel>('/team-chat/channels', data),
+  openDM: (userId: string) => api.post<TeamChatChannel>('/team-chat/dm', { user_id: userId }),
+  messages: (channelId: string, params?: { before_id?: string; limit?: number }) =>
+    api.get<{ messages: TeamChatMessage[]; has_more: boolean }>(`/team-chat/channels/${channelId}/messages`, { params }),
+  send: (channelId: string, body: string) =>
+    api.post<TeamChatMessage>(`/team-chat/channels/${channelId}/messages`, { body }),
+  edit: (messageId: string, body: string) =>
+    api.put<TeamChatMessage>(`/team-chat/messages/${messageId}`, { body }),
+  remove: (messageId: string) => api.delete(`/team-chat/messages/${messageId}`),
+  markRead: (channelId: string) => api.post(`/team-chat/channels/${channelId}/read`),
+  typing: (channelId: string) => api.post(`/team-chat/channels/${channelId}/typing`, {})
+}
+
 // Calling - Call Logs & IVR Flows
 export interface CallLog {
   id: string
