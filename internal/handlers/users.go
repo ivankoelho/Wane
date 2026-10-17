@@ -1039,8 +1039,12 @@ func (a *App) UpdateAvailability(r *fastglue.Request) error {
 	transfersReturned := 0
 	if !req.IsAvailable {
 		status = "away"
-		// Return agent's active transfers to queue when going away
-		transfersReturned = a.ReturnAgentTransfersToQueue(userID, orgID)
+		// Original behaviour: going away returns the agent's attendances to the queue
+		// at once. An organization that turned the away tolerance on keeps them with
+		// the agent; the sweep releases them only after the tolerance (SweepAway).
+		if tolerant, _ := a.awayTolerance(orgID); !tolerant {
+			transfersReturned = a.ReturnAgentTransfersToQueue(userID, orgID)
+		}
 	}
 
 	// Get the current break start time if away

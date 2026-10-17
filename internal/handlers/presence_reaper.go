@@ -103,6 +103,7 @@ func (r *PresenceReaper) Start(ctx context.Context) {
 			return
 		case now := <-t.C:
 			r.Sweep(now)
+			r.SweepAway(now)
 		}
 	}
 }

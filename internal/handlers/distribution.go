@@ -210,14 +210,15 @@ func (a *App) sendTransferConflict(r *fastglue.Request, orgID, userID, transferI
 // Distribution audit events, written to the existing audit log (resource type
 // "transfers", resource id = the transfer) so there is a single trail.
 const (
-	distEventClaimed         = "claimed"          // an agent took an unassigned attendance (reply, self-assign, queue pick)
-	distEventAssigned        = "assigned"         // a supervisor or the system set/changed the responsible agent
-	distEventReleased        = "released"         // returned to the queue by a person
-	distEventReturnedAway    = "returned_away"    // returned because the agent went away
-	distEventReturnedOffline = "returned_offline" // returned because the agent stayed disconnected past the grace
-	distEventAutoAssigned    = "auto_assigned"    // chosen by the distribution strategy
-	distEventQueued          = "queued"           // no eligible agent: left in the queue
-	distEventConflict        = "conflict"         // an attempt lost a race or was refused ownership
+	distEventClaimed             = "claimed"               // an agent took an unassigned attendance (reply, self-assign, queue pick)
+	distEventAssigned            = "assigned"              // a supervisor or the system set/changed the responsible agent
+	distEventReleased            = "released"              // returned to the queue by a person
+	distEventReturnedAway        = "returned_away"         // returned because the agent went away
+	distEventReturnedOffline     = "returned_offline"      // returned because the agent stayed disconnected past the grace
+	distEventReturnedAwayTimeout = "returned_away_timeout" // returned because the agent stayed away past the organization's tolerance
+	distEventAutoAssigned        = "auto_assigned"         // chosen by the distribution strategy
+	distEventQueued              = "queued"                // no eligible agent: left in the queue
+	distEventConflict            = "conflict"              // an attempt lost a race or was refused ownership
 )
 
 // auditDistribution records a distribution event. actor == nil means the system
