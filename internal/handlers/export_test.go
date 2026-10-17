@@ -179,3 +179,8 @@ func (a *App) TransitionInTxWithBadCauseForTest(contact *models.Contact, to mode
 		return tx.Model(&models.Contact{}).Where("id = ?", contact.ID).Update("profile_name", "written-after").Error
 	})
 }
+
+// ReassignAwayTransferForTest exposes reassignAwayTransfer.
+func (a *App) ReassignAwayTransferForTest(t *models.AgentTransfer, awayAgent uuid.UUID, event string) bool {
+	return a.reassignAwayTransfer(t, awayAgent, event)
+}
