@@ -56,6 +56,15 @@ const (
 	TypeConversationNoteUpdated = "conversation_note_updated"
 	TypeConversationNoteDeleted = "conversation_note_deleted"
 
+	// Internal chat (team_chat). Payloads are TeamChatEventPayload: ids only, the
+	// content is always fetched by REST so authorization runs again on every read.
+	TypeTeamChatMessage        = "team_chat_message"
+	TypeTeamChatMessageUpdated = "team_chat_message_updated"
+	TypeTeamChatMessageDeleted = "team_chat_message_deleted"
+	TypeTeamChatRead           = "team_chat_read"
+	TypeTeamChatTyping         = "team_chat_typing"
+	TypeTeamChatChannel        = "team_chat_channel"
+
 	// Call types
 	TypeCallIncoming = "call_incoming"
 	TypeCallAnswered = "call_answered"
@@ -143,4 +152,14 @@ type SetContactPayload struct {
 type StatusUpdatePayload struct {
 	MessageID string `json:"message_id"`
 	Status    string `json:"status"`
+}
+
+// TeamChatEventPayload is the payload of every team_chat_* event. It carries
+// identifiers only (never message text): a client that learns of a message by
+// event still has to fetch it by REST, where access is checked again.
+type TeamChatEventPayload struct {
+	ChannelID uuid.UUID  `json:"channel_id"`
+	MessageID *uuid.UUID `json:"message_id,omitempty"`
+	UserID    uuid.UUID  `json:"user_id"` // who did it (author, reader, typist, creator)
+	At        time.Time  `json:"at"`
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -392,6 +393,7 @@ func (a *App) CreateChatChannel(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create channel", nil, "")
 	}
 	a.logAudit(orgID, userID, "chat_channel", ch.ID, models.AuditActionCreated, nil, ch)
+	a.notifyChat(orgID, &ch, websocket.TypeTeamChatChannel, userID, nil, uuid.Nil)
 	return r.SendEnvelope(ChatChannelResponse{
 		ID: ch.ID, Kind: ch.Kind, Name: ch.Name, CreatedAt: ch.CreatedAt,
 	})
@@ -450,6 +452,7 @@ func (a *App) CreateChatDM(r *fastglue.Request) error {
 			}
 		} else {
 			ch = &newCh
+			a.notifyChat(orgID, ch, websocket.TypeTeamChatChannel, userID, nil, uuid.Nil)
 		}
 	}
 	other := req.UserID
@@ -551,6 +554,7 @@ func (a *App) SendChatMessage(r *fastglue.Request) error {
 		a.Log.Error("Failed to create chat message", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
+	a.notifyChat(orgID, ch, websocket.TypeTeamChatMessage, userID, &msg.ID, uuid.Nil)
 	return r.SendEnvelope(chatMessageToResponse(msg, a.chatUserNames([]uuid.UUID{userID})))
 }
 
@@ -581,7 +585,7 @@ func (a *App) UpdateChatMessage(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-	msg, _, ok := a.chatMessageFor(r, userID, orgID)
+	msg, ch, ok := a.chatMessageFor(r, userID, orgID)
 	if !ok {
 		return nil
 	}
@@ -602,6 +606,7 @@ func (a *App) UpdateChatMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to edit message", nil, "")
 	}
 	msg.Body, msg.EditedAt = body, &now
+	a.notifyChat(orgID, ch, websocket.TypeTeamChatMessageUpdated, userID, &msg.ID, uuid.Nil)
 	return r.SendEnvelope(chatMessageToResponse(*msg, a.chatUserNames([]uuid.UUID{msg.UserID})))
 }
 
@@ -628,6 +633,7 @@ func (a *App) DeleteChatMessage(r *fastglue.Request) error {
 		a.logAudit(orgID, userID, "chat_message", msg.ID, models.AuditActionDeleted,
 			map[string]any{"channel_id": msg.ChannelID, "author_id": msg.UserID}, nil)
 	}
+	a.notifyChat(orgID, ch, websocket.TypeTeamChatMessageDeleted, userID, &msg.ID, uuid.Nil)
 	return r.SendEnvelope(map[string]any{"deleted": true})
 }
 
@@ -656,9 +662,11 @@ func (a *App) MarkChatChannelRead(r *fastglue.Request) error {
 	var cur models.ChatRead
 	if a.DB.Where("channel_id = ? AND user_id = ?", ch.ID, userID).First(&cur).Error == nil {
 		if hasLatest && cur.LastReadMessageID != nil && *cur.LastReadMessageID == latest.ID {
+			a.notifyChatRead(orgID, userID, ch)
 			return r.SendEnvelope(map[string]any{"unread_count": 0})
 		}
 		if cur.LastReadAt.After(at) {
+			a.notifyChatRead(orgID, userID, ch)
 			return r.SendEnvelope(map[string]any{"unread_count": 0})
 		}
 		a.DB.Model(&cur).Updates(map[string]any{"last_read_at": at, "last_read_message_id": msgID})
@@ -670,5 +678,6 @@ func (a *App) MarkChatChannelRead(r *fastglue.Request) error {
 		// A concurrent first mark-read is harmless: the other row wins.
 		a.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&rd)
 	}
+	a.notifyChatRead(orgID, userID, ch)
 	return r.SendEnvelope(map[string]any{"unread_count": 0})
 }

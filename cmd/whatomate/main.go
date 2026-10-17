@@ -843,6 +843,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/team-chat/channels/{id}/messages", app.ListChatMessages)
 	g.POST("/api/team-chat/channels/{id}/messages", app.SendChatMessage)
 	g.POST("/api/team-chat/channels/{id}/read", app.MarkChatChannelRead)
+	g.POST("/api/team-chat/channels/{id}/typing", app.NotifyChatTyping)
 	g.PUT("/api/team-chat/messages/{id}", app.UpdateChatMessage)
 	g.DELETE("/api/team-chat/messages/{id}", app.DeleteChatMessage)
 
