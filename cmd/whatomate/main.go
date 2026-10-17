@@ -836,6 +836,16 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/contacts/{id}/notes/{note_id}", app.UpdateConversationNote)
 	g.DELETE("/api/contacts/{id}/notes/{note_id}", app.DeleteConversationNote)
 
+	// Chat interno (team_chat)
+	g.GET("/api/team-chat/channels", app.ListChatChannels)
+	g.POST("/api/team-chat/channels", app.CreateChatChannel)
+	g.POST("/api/team-chat/dm", app.CreateChatDM)
+	g.GET("/api/team-chat/channels/{id}/messages", app.ListChatMessages)
+	g.POST("/api/team-chat/channels/{id}/messages", app.SendChatMessage)
+	g.POST("/api/team-chat/channels/{id}/read", app.MarkChatChannelRead)
+	g.PUT("/api/team-chat/messages/{id}", app.UpdateChatMessage)
+	g.DELETE("/api/team-chat/messages/{id}", app.DeleteChatMessage)
+
 	// CRM — etapas de ocorrência
 	g.GET("/api/occurrence-stages", app.ListOccurrenceStages)
 	g.POST("/api/occurrence-stages", app.CreateOccurrenceStage)
