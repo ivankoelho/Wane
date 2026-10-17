@@ -121,7 +121,7 @@ async function reopen() {
         <Badge v-if="archived" variant="secondary">{{ t('teamChat.manage.archivedBadge') }}</Badge>
         <Button
           v-if="canCompose && !archived"
-          variant="ghost" size="icon" class="h-7 w-7"
+          variant="ghost" size="icon" class="h-9 w-9 md:h-7 md:w-7"
           :aria-label="t('teamChat.manage.rename')" @click="renaming = true; draftName = name"
         ><Pencil class="h-3.5 w-3.5" /></Button>
       </div>
@@ -133,7 +133,7 @@ async function reopen() {
         <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {{ t('teamChat.manage.members', { n: members.length }) }}
         </h3>
-        <Button v-if="canCompose && !archived" variant="outline" size="sm" class="h-7 text-xs" @click="pickOpen = true">
+        <Button v-if="canCompose && !archived" variant="outline" size="sm" class="h-9 text-xs md:h-7" @click="pickOpen = true">
           <Plus class="mr-1 h-3 w-3" />{{ t('teamChat.manage.add') }}
         </Button>
       </div>
@@ -147,12 +147,12 @@ async function reopen() {
           <Badge v-if="m.role === 'owner'" variant="secondary" class="gap-1"><Crown class="h-3 w-3" />{{ t('teamChat.manage.owner') }}</Badge>
           <template v-if="canCompose && m.user_id !== meId">
             <Button
-              v-if="!archived" variant="ghost" size="icon" class="h-7 w-7"
+              v-if="!archived" variant="ghost" size="icon" class="h-9 w-9 md:h-7 md:w-7"
               :aria-label="m.role === 'owner' ? t('teamChat.manage.demote', { name: m.name }) : t('teamChat.manage.promote', { name: m.name })"
               :disabled="busy" @click="toggleRole(m)"
             ><Crown class="h-3.5 w-3.5" /></Button>
             <Button
-              variant="ghost" size="icon" class="h-7 w-7 text-destructive"
+              variant="ghost" size="icon" class="h-9 w-9 md:h-7 md:w-7 text-destructive"
               :aria-label="t('teamChat.manage.remove', { name: m.name })" :disabled="busy" @click="remove(m)"
             ><UserMinus class="h-3.5 w-3.5" /></Button>
           </template>
