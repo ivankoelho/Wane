@@ -4017,6 +4017,10 @@
         "label": "Atribuição de conversas",
         "description": "Defina qual atendente cuida de cada conversa."
       },
+      "team_chat": {
+        "label": "Chat interno",
+        "description": "Converse com a equipe em canais e mensagens diretas."
+      },
       "conversations": {
         "label": "Visibilidade de conversas",
         "description": "Controle quais conversas de outras pessoas ficam visíveis."
@@ -4326,6 +4330,22 @@
       "chat_assign_write": {
         "label": "Atribuir conversas",
         "description": "Escolher qual atendente cuida de cada conversa."
+      },
+      "team_chat_read": {
+        "label": "Ver o chat interno",
+        "description": "Abrir os canais e as mensagens de que participa."
+      },
+      "team_chat_write": {
+        "label": "Enviar mensagens internas",
+        "description": "Escrever nos canais e iniciar mensagens diretas."
+      },
+      "team_chat_manage": {
+        "label": "Gerenciar canais internos",
+        "description": "Criar e gerenciar os canais do chat interno."
+      },
+      "team_chat_delete": {
+        "label": "Excluir mensagens de outros",
+        "description": "Remover mensagens internas escritas por outras pessoas."
       },
       "conversations_view_all": {
         "label": "Ver todas as conversas",

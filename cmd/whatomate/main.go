@@ -229,6 +229,12 @@ func runServer(args []string) {
 			lo.Fatal("Occurrence processes permission backfill failed", "error", err)
 		}
 
+		// Same window: team_chat is a new resource; system admin, manager and
+		// agent roles get it, custom roles never do (see teamChatGrants).
+		if err := database.BackfillTeamChatPermissions(db, lo); err != nil {
+			lo.Fatal("Team chat permissions backfill failed", "error", err)
+		}
+
 		// Data fix, not a schema migration: AutoMigrate adding occurrences.source
 		// with a DB default backfilled every existing row to 'whatsapp',
 		// including cases opened manually. Runs once, guarded by the column's

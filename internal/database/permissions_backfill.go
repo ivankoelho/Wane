@@ -860,3 +860,71 @@ func BackfillWhatsAppUsagePermissions(db *gorm.DB, lo logf.Logger) error {
 	lo.Info("whatsapp_usage permissions backfill complete", "links_granted", res.RowsAffected)
 	return nil
 }
+
+// teamChatGrants maps each SYSTEM role to the team_chat actions it gets,
+// mirroring SystemRolePermissions: admin and manager administer the chat, an
+// agent only uses it. Custom roles are deliberately absent — an admin grants
+// them from the roles screen, so the backfill never widens a custom role.
+var teamChatGrants = []struct{ role, action string }{
+	{"admin", models.ActionRead}, {"admin", models.ActionWrite}, {"admin", models.ActionManage}, {"admin", models.ActionDelete},
+	{"manager", models.ActionRead}, {"manager", models.ActionWrite}, {"manager", models.ActionManage}, {"manager", models.ActionDelete},
+	{"agent", models.ActionRead}, {"agent", models.ActionWrite},
+}
+
+// BackfillTeamChatPermissions grants the new team_chat resource to the system
+// admin, manager and agent roles of existing organizations (internal chat,
+// Fase 1). FixSystemRolePermissions skips roles that already have permissions,
+// so without this existing organizations would never see the chat.
+// Idempotent per organization: an organization where any live role already
+// holds a team_chat permission is skipped, so an admin who later revokes one is
+// not re-granted on every boot. Purely additive; never touches custom roles.
+func BackfillTeamChatPermissions(db *gorm.DB, lo logf.Logger) error {
+	var seeded int64
+	if err := db.Model(&models.Permission{}).
+		Where("resource = ?", models.ResourceTeamChat).
+		Count(&seeded).Error; err != nil {
+		return fmt.Errorf("failed to count the team_chat permissions: %w", err)
+	}
+	if seeded == 0 {
+		lo.Warn("team_chat permissions not seeded yet, did nothing")
+		return nil
+	}
+
+	placeholders := make([]string, len(teamChatGrants))
+	args := make([]any, 0, len(teamChatGrants)*2+1)
+	for i, g := range teamChatGrants {
+		placeholders[i] = "(?,?)"
+		args = append(args, g.role, g.action)
+	}
+	args = append(args, models.ResourceTeamChat, models.ResourceTeamChat)
+
+	// One INSERT, so the per-organization guard reads a snapshot taken before
+	// this statement's own rows (same reasoning as BackfillOccurrencePermissions).
+	res := db.Exec(fmt.Sprintf(`
+		INSERT INTO role_permissions (custom_role_id, permission_id)
+		SELECT r.id, target.id
+		FROM custom_roles r
+		JOIN (VALUES %s) AS g(role_name, action) ON g.role_name = r.name
+		JOIN permissions target ON target.resource = ? AND target.action = g.action
+		WHERE r.deleted_at IS NULL
+		  AND r.is_system = true
+		  AND NOT EXISTS (
+		    SELECT 1
+		    FROM custom_roles r2
+		    JOIN role_permissions rp2 ON rp2.custom_role_id = r2.id
+		    JOIN permissions p2 ON p2.id = rp2.permission_id
+		    WHERE r2.organization_id = r.organization_id
+		      AND r2.deleted_at IS NULL
+		      AND p2.resource = ?
+		  )
+		ON CONFLICT DO NOTHING`, strings.Join(placeholders, ",")), args...)
+	if res.Error != nil {
+		return fmt.Errorf("failed to grant the team_chat permissions: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		lo.Info("team_chat permissions backfill: nothing pending")
+		return nil
+	}
+	lo.Info("team_chat permissions backfill complete", "links_granted", res.RowsAffected)
+	return nil
+}

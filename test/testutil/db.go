@@ -150,6 +150,11 @@ func runMigrations(db *gorm.DB) error {
 		&models.OccurrenceProcess{},
 		&models.OccurrenceProcessMessage{},
 		&models.OccurrenceDocument{},
+		// Chat interno
+		&models.ChatChannel{},
+		&models.ChatChannelMember{},
+		&models.ChatMessage{},
+		&models.ChatRead{},
 		// Help Desk — unidade e departamento
 		&models.Unit{},
 		&models.Department{},
@@ -179,6 +184,11 @@ func runMigrations(db *gorm.DB) error {
 // Uses TRUNCATE CASCADE to handle foreign key constraints properly.
 func cleanupTables(db *gorm.DB) {
 	tables := []string{
+		// Chat interno
+		"chat_reads",
+		"chat_messages",
+		"chat_channel_members",
+		"chat_channels",
 		// Dashboard tables
 		"widgets",
 		// Catalog tables
@@ -271,6 +281,10 @@ func cleanupTables(db *gorm.DB) {
 // TruncateTables truncates all tables (PostgreSQL only, faster than DELETE).
 func TruncateTables(db *gorm.DB) {
 	tables := []string{
+		"chat_reads",
+		"chat_messages",
+		"chat_channel_members",
+		"chat_channels",
 		"widgets",
 		"catalog_products",
 		"catalogs",

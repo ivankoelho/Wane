@@ -179,3 +179,18 @@ func (a *App) TransitionInTxWithBadCauseForTest(contact *models.Contact, to mode
 		return tx.Model(&models.Contact{}).Where("id = ?", contact.ID).Update("profile_name", "written-after").Error
 	})
 }
+
+// CanAccessChatChannelForTest exposes canAccessChatChannel to handlers_test.
+func (a *App) CanAccessChatChannelForTest(userID, orgID uuid.UUID, ch *models.ChatChannel) bool {
+	return a.canAccessChatChannel(userID, orgID, ch)
+}
+
+// LoadChatChannelForTest exposes loadChatChannel to handlers_test.
+func (a *App) LoadChatChannelForTest(orgID, channelID uuid.UUID) (*models.ChatChannel, bool) {
+	return a.loadChatChannel(orgID, channelID)
+}
+
+// CanDeleteChatMessageForTest exposes canDeleteChatMessage to handlers_test.
+func (a *App) CanDeleteChatMessageForTest(userID, orgID uuid.UUID, msg *models.ChatMessage, ch *models.ChatChannel) bool {
+	return a.canDeleteChatMessage(userID, orgID, msg, ch)
+}

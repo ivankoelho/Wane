@@ -4024,6 +4024,10 @@
         "label": "Chat",
         "description": "Follow and answer customer conversations."
       },
+      "team_chat": {
+        "label": "Internal chat",
+        "description": "Talk with teammates in channels and direct messages."
+      },
       "chat_assign": {
         "label": "Conversation assignment",
         "description": "Choose which agent handles each conversation."
@@ -4337,6 +4341,22 @@
       "chat_assign_write": {
         "label": "Assign conversations",
         "description": "Choose which agent handles each conversation."
+      },
+      "team_chat_read": {
+        "label": "View internal chat",
+        "description": "Open channels and messages you belong to."
+      },
+      "team_chat_write": {
+        "label": "Send internal messages",
+        "description": "Write in channels and start direct messages."
+      },
+      "team_chat_manage": {
+        "label": "Manage internal channels",
+        "description": "Create and manage internal chat channels."
+      },
+      "team_chat_delete": {
+        "label": "Delete others' internal messages",
+        "description": "Remove internal messages written by other people."
       },
       "conversations_view_all": {
         "label": "View all conversations",
