@@ -155,7 +155,7 @@ async function removeMessage(m: TeamChatMessage) {
 <template>
   <section class="flex h-full min-w-0 flex-1 flex-col bg-background" :aria-label="channel?.name || t('teamChat.title')">
     <header class="flex items-center gap-2 border-b px-4 py-3">
-      <Button v-if="showBack" variant="ghost" size="icon" class="h-8 w-8 md:hidden" :aria-label="t('common.back')" @click="emit('back')">
+      <Button v-if="showBack" variant="ghost" size="icon" class="h-10 w-10 md:hidden" :aria-label="t('common.back')" @click="emit('back')">
         <ArrowLeft class="h-4 w-4" />
       </Button>
       <Users v-if="channel?.kind === 'team'" class="h-4 w-4 text-muted-foreground" />
@@ -239,11 +239,11 @@ async function removeMessage(m: TeamChatMessage) {
               <p v-else class="whitespace-pre-wrap break-words text-sm">{{ m.body }}</p>
             </div>
 
-            <div v-if="editingId !== m.id && (canEdit(m) || canDelete(m))" class="flex gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-              <button v-if="canEdit(m)" type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="t('teamChat.editMessage')" @click="startEdit(m)">
+            <div v-if="editingId !== m.id && (canEdit(m) || canDelete(m))" class="flex gap-0.5 transition-opacity md:opacity-0 md:focus-within:opacity-100 md:group-hover:opacity-100">
+              <button v-if="canEdit(m)" type="button" class="rounded p-2 text-muted-foreground md:p-1 hover:bg-muted hover:text-foreground" :aria-label="t('teamChat.editMessage')" @click="startEdit(m)">
                 <Pencil class="h-3.5 w-3.5" />
               </button>
-              <button v-if="canDelete(m)" type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive" :aria-label="t('teamChat.deleteMessage')" @click="removeMessage(m)">
+              <button v-if="canDelete(m)" type="button" class="rounded p-2 text-muted-foreground md:p-1 hover:bg-muted hover:text-destructive" :aria-label="t('teamChat.deleteMessage')" @click="removeMessage(m)">
                 <Trash2 class="h-3.5 w-3.5" />
               </button>
             </div>
@@ -261,6 +261,7 @@ async function removeMessage(m: TeamChatMessage) {
             :rows="1"
             :placeholder="t('teamChat.composerPlaceholder')"
             :aria-label="t('teamChat.composerPlaceholder')"
+            :title="t('teamChat.composerHint')"
             @keydown="onComposerKey"
             @input="onInput"
           />
