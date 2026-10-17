@@ -432,7 +432,7 @@ func (a *App) RemoveChatChannelMember(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-	target, err := parsePathUUID(r, "user_id", "user")
+	target, err := parsePathUUID(r, "member_id", "member")
 	if err != nil {
 		return nil
 	}
@@ -463,7 +463,7 @@ func (a *App) SetChatMemberRole(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-	target, err := parsePathUUID(r, "user_id", "user")
+	target, err := parsePathUUID(r, "member_id", "member")
 	if err != nil {
 		return nil
 	}

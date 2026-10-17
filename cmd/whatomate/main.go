@@ -858,8 +858,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Phase A: channel management
 	g.GET("/api/team-chat/channels/{id}/members", app.ListChatChannelMembers)
 	g.POST("/api/team-chat/channels/{id}/members", app.AddChatChannelMember)
-	g.PUT("/api/team-chat/channels/{id}/members/{user_id}", app.SetChatMemberRole)
-	g.DELETE("/api/team-chat/channels/{id}/members/{user_id}", app.RemoveChatChannelMember)
+	g.PUT("/api/team-chat/channels/{id}/members/{member_id}", app.SetChatMemberRole)
+	g.DELETE("/api/team-chat/channels/{id}/members/{member_id}", app.RemoveChatChannelMember)
 	g.POST("/api/team-chat/channels/{id}/leave", app.LeaveChatChannel)
 	g.PUT("/api/team-chat/channels/{id}", app.RenameChatChannel)
 	g.POST("/api/team-chat/channels/{id}/archive", app.ArchiveChatChannel)
