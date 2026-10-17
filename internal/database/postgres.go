@@ -147,6 +147,12 @@ func GetMigrationModels() []MigrationModel {
 		{"OccurrenceProcessMessage", &models.OccurrenceProcessMessage{}},
 		{"OccurrenceDocument", &models.OccurrenceDocument{}},
 
+		// Chat interno (team_chat)
+		{"ChatChannel", &models.ChatChannel{}},
+		{"ChatChannelMember", &models.ChatChannelMember{}},
+		{"ChatMessage", &models.ChatMessage{}},
+		{"ChatRead", &models.ChatRead{}},
+
 		// Help Desk — unidade e departamento
 		{"Unit", &models.Unit{}},
 		{"Department", &models.Department{}},
@@ -345,6 +351,10 @@ func coreIndexes() []string {
 		END $$`,
 		// Composite index matching the ListContacts filter + ordering exactly
 		`CREATE INDEX IF NOT EXISTS idx_contacts_org_status_lastmsg ON contacts(organization_id, contact_status, last_message_at DESC NULLS LAST)`,
+		// Chat interno: cursor de mensagens e unicidade de canal de time / DM.
+		`CREATE INDEX IF NOT EXISTS idx_chat_messages_channel_cursor ON chat_messages(channel_id, created_at DESC, id DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_channels_team_unique ON chat_channels(organization_id, team_id) WHERE kind = 'team' AND deleted_at IS NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_channels_dm_unique ON chat_channels(organization_id, dm_user_low_id, dm_user_high_id) WHERE kind = 'dm' AND deleted_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_phone_status ON chatbot_sessions(organization_id, phone_number, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_priority ON keyword_rules(organization_id, is_enabled, priority DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_active ON agent_transfers(organization_id, phone_number, status)`,

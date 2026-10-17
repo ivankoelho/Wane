@@ -267,6 +267,7 @@
   "nav": {
     "dashboard": "Painel",
     "chat": "Conversas",
+    "teamChat": "Chat interno",
     "crm": "Protocolos",
     "salesOperation": "CRM",
     "salesDashboard": "Dashboard de Vendas",
@@ -354,6 +355,52 @@
     "goAway": "Ficar ausente",
     "ariaUserMenu": "Menu do usuário",
     "ariaToggleAvailability": "Alternar status de disponibilidade"
+  },
+  "teamChat": {
+    "title": "Chat interno",
+    "sectionTeams": "Equipes",
+    "sectionChannels": "Canais",
+    "sectionDirect": "Mensagens diretas",
+    "newChannel": "Novo canal",
+    "newChannelDesc": "Um canal privado: só quem você adicionar consegue ler.",
+    "newDm": "Nova mensagem direta",
+    "newDmDesc": "Inicie uma conversa privada com um colega.",
+    "channelName": "Nome do canal",
+    "pickPerson": "Com quem você quer conversar?",
+    "pickMembers": "Membros",
+    "searchPeople": "Buscar pessoas",
+    "noPeople": "Nenhuma pessoa encontrada.",
+    "startDm": "Iniciar conversa",
+    "createFailed": "Não foi possível criar. Tente novamente.",
+    "unnamed": "Sem nome",
+    "online": "Online",
+    "offline": "Offline",
+    "unreadCount": "{n} mensagens não lidas",
+    "noChannels": "Você ainda não está em nenhum canal. Entre em uma equipe ou inicie uma mensagem direta.",
+    "loadFailedTitle": "Não foi possível carregar seus canais",
+    "loadFailed": "Verifique a conexão e tente novamente.",
+    "pickTitle": "Escolha uma conversa",
+    "pickDescription": "Selecione um canal ou uma mensagem direta à esquerda.",
+    "noAccessTitle": "Sem acesso a esta conversa",
+    "noAccess": "Ela não existe, ou você não participa dela.",
+    "messagesFailedTitle": "Não foi possível carregar as mensagens",
+    "messagesFailed": "Verifique a conexão e tente novamente.",
+    "noMessagesTitle": "Nenhuma mensagem ainda",
+    "noMessages": "Seja o primeiro a escrever aqui.",
+    "composerPlaceholder": "Escreva uma mensagem",
+    "composerHint": "Enter envia, Shift+Enter quebra a linha.",
+    "send": "Enviar",
+    "sendFailed": "Não foi possível enviar a mensagem.",
+    "readOnly": "Você pode ler este chat, mas não escrever nele.",
+    "tooLong": "As mensagens são limitadas a {max} caracteres.",
+    "typingOne": "{name} está digitando…",
+    "typingMany": "Várias pessoas estão digitando…",
+    "edited": "(editada)",
+    "editMessage": "Editar mensagem",
+    "editFailed": "Não foi possível editar a mensagem.",
+    "deleteMessage": "Excluir mensagem",
+    "confirmDelete": "Excluir esta mensagem?",
+    "deleteFailed": "Não foi possível excluir a mensagem."
   },
   "chat": {
     "marketingOptOut": "Recusa de marketing",
@@ -4021,6 +4068,10 @@
         "label": "Atribuição de conversas",
         "description": "Defina qual atendente cuida de cada conversa."
       },
+      "team_chat": {
+        "label": "Chat interno",
+        "description": "Converse com a equipe em canais e mensagens diretas."
+      },
       "conversations": {
         "label": "Visibilidade de conversas",
         "description": "Controle quais conversas de outras pessoas ficam visíveis."
@@ -4330,6 +4381,22 @@
       "chat_assign_write": {
         "label": "Atribuir conversas",
         "description": "Escolher qual atendente cuida de cada conversa."
+      },
+      "team_chat_read": {
+        "label": "Ver o chat interno",
+        "description": "Abrir os canais e as mensagens de que participa."
+      },
+      "team_chat_write": {
+        "label": "Enviar mensagens internas",
+        "description": "Escrever nos canais e iniciar mensagens diretas."
+      },
+      "team_chat_manage": {
+        "label": "Gerenciar canais internos",
+        "description": "Criar e gerenciar os canais do chat interno."
+      },
+      "team_chat_delete": {
+        "label": "Excluir mensagens de outros",
+        "description": "Remover mensagens internas escritas por outras pessoas."
       },
       "conversations_view_all": {
         "label": "Ver todas as conversas",
