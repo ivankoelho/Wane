@@ -296,12 +296,6 @@ func (a *App) calculateBreakTimes(agentIDs []uuid.UUID, start, end time.Time) ma
 	return totals
 }
 
-// calculateBreakTime is the single-agent form of calculateBreakTimes.
-func (a *App) calculateBreakTime(agentID uuid.UUID, start, end time.Time) (totalMins float64, count int64) {
-	t := a.calculateBreakTimes([]uuid.UUID{agentID}, start, end)[agentID]
-	return t.mins, t.count
-}
-
 // calculateAgentSummaryStats fills the summary for one agent from the same
 // computation as the per-agent stats, so the two can never disagree.
 func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
