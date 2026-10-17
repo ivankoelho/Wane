@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -252,8 +253,26 @@ func (a *App) BroadcastAgentPresence(orgID, userID uuid.UUID, online bool) {
 	}
 	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
 		Type:    websocket.TypeAgentPresence,
-		Payload: map[string]any{"user_id": userID.String(), "online": online},
+		Payload: a.withPresence(orgID, userID, map[string]any{"user_id": userID.String(), "online": online}),
 	})
+}
+
+// withPresence adds the agent's backend-computed state and the instant it began
+// to a presence/availability payload, so clients show "away for 08:32" from a
+// server timestamp instead of timing it themselves. "online" and "is_available"
+// keep their meaning; "state" is the combined answer ("since" is null when the
+// log cannot say when it began).
+func (a *App) withPresence(orgID, userID uuid.UUID, payload map[string]any) map[string]any {
+	info := a.CurrentPresence(orgID, userID)
+	if info.State == "" {
+		return payload
+	}
+	payload["state"] = string(info.State)
+	payload["since"] = nil
+	if info.Since != nil {
+		payload["since"] = info.Since.UTC().Format(time.RFC3339Nano)
+	}
+	return payload
 }
 
 // broadcastAgentAvailability tells the organization an agent toggled
@@ -264,7 +283,7 @@ func (a *App) broadcastAgentAvailability(orgID, userID uuid.UUID, available bool
 	}
 	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
 		Type:    websocket.TypeAgentAvailability,
-		Payload: map[string]any{"user_id": userID.String(), "is_available": available},
+		Payload: a.withPresence(orgID, userID, map[string]any{"user_id": userID.String(), "is_available": available}),
 	})
 }
 

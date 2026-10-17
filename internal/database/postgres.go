@@ -110,6 +110,7 @@ func GetMigrationModels() []MigrationModel {
 
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},
+		{"AgentPresenceLog", &models.AgentPresenceLog{}},
 
 		// Canned responses
 		{"CannedResponse", &models.CannedResponse{}},
@@ -365,6 +366,9 @@ func coreIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_org_active ON webhooks(organization_id, is_active)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_user_time ON user_availability_logs(user_id, started_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_org_time ON user_availability_logs(organization_id, started_at DESC)`,
+		// Presence: exactly one open interval per agent and organization, and fast history reads.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_presence_log_open ON agent_presence_log(organization_id, user_id) WHERE ended_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_presence_log_user_time ON agent_presence_log(organization_id, user_id, started_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_providers_org_provider ON sso_providers(organization_id, provider)`,
 		// Teams indexes
 		`CREATE INDEX IF NOT EXISTS idx_teams_org_active ON teams(organization_id, is_active)`,
