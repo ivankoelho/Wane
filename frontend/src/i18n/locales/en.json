@@ -267,6 +267,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "chat": "Chat",
+    "teamChat": "Team chat",
     "crm": "Protocols",
     "salesOperation": "CRM",
     "salesDashboard": "Sales Dashboard",
@@ -354,6 +355,52 @@
     "goAway": "Go Away",
     "ariaUserMenu": "User menu",
     "ariaToggleAvailability": "Toggle availability status"
+  },
+  "teamChat": {
+    "title": "Team chat",
+    "sectionTeams": "Teams",
+    "sectionChannels": "Channels",
+    "sectionDirect": "Direct messages",
+    "newChannel": "New channel",
+    "newChannelDesc": "A private channel: only the people you add can read it.",
+    "newDm": "New direct message",
+    "newDmDesc": "Start a private conversation with a colleague.",
+    "channelName": "Channel name",
+    "pickPerson": "Who do you want to talk to?",
+    "pickMembers": "Members",
+    "searchPeople": "Search people",
+    "noPeople": "No people found.",
+    "startDm": "Start conversation",
+    "createFailed": "Could not create it. Try again.",
+    "unnamed": "Untitled",
+    "online": "Online",
+    "offline": "Offline",
+    "unreadCount": "{n} unread messages",
+    "noChannels": "You are not in any channel yet. Join a team or start a direct message.",
+    "loadFailedTitle": "Could not load your channels",
+    "loadFailed": "Check your connection and try again.",
+    "pickTitle": "Pick a conversation",
+    "pickDescription": "Choose a channel or a direct message on the left.",
+    "noAccessTitle": "No access to this conversation",
+    "noAccess": "It does not exist, or you are not a member of it.",
+    "messagesFailedTitle": "Could not load the messages",
+    "messagesFailed": "Check your connection and try again.",
+    "noMessagesTitle": "No messages yet",
+    "noMessages": "Be the first to write here.",
+    "composerPlaceholder": "Write a message",
+    "composerHint": "Enter sends, Shift+Enter adds a line.",
+    "send": "Send",
+    "sendFailed": "Could not send the message.",
+    "readOnly": "You can read this chat but not write in it.",
+    "tooLong": "Messages are limited to {max} characters.",
+    "typingOne": "{name} is typing…",
+    "typingMany": "Several people are typing…",
+    "edited": "(edited)",
+    "editMessage": "Edit message",
+    "editFailed": "Could not edit the message.",
+    "deleteMessage": "Delete message",
+    "confirmDelete": "Delete this message?",
+    "deleteFailed": "Could not delete the message."
   },
   "chat": {
     "marketingOptOut": "Marketing Opt-out",
@@ -2220,6 +2267,10 @@
     "strictConversationVisibilityDesc": "When on, an assigned conversation is visible and answerable only by the responsible agent. Supervisors and managers keep access via permissions.",
     "signWithAgentName": "Sign messages with the agent's name",
     "signWithAgentNameDesc": "When on, outgoing free-text and media captions are prefixed with the agent's first name (in bold), so the customer sees who is replying. Does not affect templates or the internal label.",
+    "awayReassign": "Keep conversations while an agent is away",
+    "awayReassignDesc": "Off: marking away returns the agent's conversations to the queue at once. On: they stay with the agent and are returned to the queue only after the time below.",
+    "awayReassignAfter": "Return to the queue after (minutes)",
+    "awayReassignAfterDesc": "Counted from the moment the agent marked away. Between 1 and 1440.",
     "businessHours": "Business Hours",
     "businessHoursDesc": "Set when the chatbot is active and configure out-of-hours behavior",
     "enableBusinessHours": "Enable Business Hours",
@@ -4024,6 +4075,10 @@
         "label": "Chat",
         "description": "Follow and answer customer conversations."
       },
+      "team_chat": {
+        "label": "Internal chat",
+        "description": "Talk with teammates in channels and direct messages."
+      },
       "chat_assign": {
         "label": "Conversation assignment",
         "description": "Choose which agent handles each conversation."
@@ -4337,6 +4392,22 @@
       "chat_assign_write": {
         "label": "Assign conversations",
         "description": "Choose which agent handles each conversation."
+      },
+      "team_chat_read": {
+        "label": "View internal chat",
+        "description": "Open channels and messages you belong to."
+      },
+      "team_chat_write": {
+        "label": "Send internal messages",
+        "description": "Write in channels and start direct messages."
+      },
+      "team_chat_manage": {
+        "label": "Manage internal channels",
+        "description": "Create and manage internal chat channels."
+      },
+      "team_chat_delete": {
+        "label": "Delete others' internal messages",
+        "description": "Remove internal messages written by other people."
       },
       "conversations_view_all": {
         "label": "View all conversations",

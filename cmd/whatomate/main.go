@@ -20,9 +20,9 @@ import (
 	"github.com/shridarpatil/whatomate/internal/handlers"
 	"github.com/shridarpatil/whatomate/internal/middleware"
 	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/internal/usage"
 	"github.com/shridarpatil/whatomate/internal/storage"
 	"github.com/shridarpatil/whatomate/internal/tts"
+	"github.com/shridarpatil/whatomate/internal/usage"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
@@ -229,6 +229,12 @@ func runServer(args []string) {
 			lo.Fatal("Occurrence processes permission backfill failed", "error", err)
 		}
 
+		// Same window: team_chat is a new resource; system admin, manager and
+		// agent roles get it, custom roles never do (see teamChatGrants).
+		if err := database.BackfillTeamChatPermissions(db, lo); err != nil {
+			lo.Fatal("Team chat permissions backfill failed", "error", err)
+		}
+
 		// Data fix, not a schema migration: AutoMigrate adding occurrences.source
 		// with a DB default backfilled every existing row to 'whatsapp',
 		// including cases opened manually. Runs once, guarded by the column's
@@ -319,8 +325,12 @@ func runServer(args []string) {
 	// Presence reaper: releases an agent's attendances only after they stay
 	// disconnected past the grace period (reconnects within it change nothing).
 	presenceReaper := handlers.NewPresenceReaper(app, handlers.DefaultPresenceGrace, 10*time.Second)
+	// A restart drops every connection at once: close the open presence intervals
+	// before the hub accepts connections instead of recording a mass "offline".
+	app.ResetPresenceLogOnBoot()
 	wsHub.SetPresenceListener(func(orgID, userID uuid.UUID, online bool) {
 		presenceReaper.OnPresenceChange(orgID, userID, online)
+		app.RecordPresence(orgID, userID)
 		app.BroadcastAgentPresence(orgID, userID, online)
 	})
 
@@ -829,6 +839,18 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/contacts/{id}/notes", app.CreateConversationNote)
 	g.PUT("/api/contacts/{id}/notes/{note_id}", app.UpdateConversationNote)
 	g.DELETE("/api/contacts/{id}/notes/{note_id}", app.DeleteConversationNote)
+
+	// Chat interno (team_chat)
+	g.GET("/api/team-chat/channels", app.ListChatChannels)
+	g.POST("/api/team-chat/channels", app.CreateChatChannel)
+	g.POST("/api/team-chat/dm", app.CreateChatDM)
+	g.GET("/api/team-chat/users", app.ListChatUsers)
+	g.GET("/api/team-chat/channels/{id}/messages", app.ListChatMessages)
+	g.POST("/api/team-chat/channels/{id}/messages", app.SendChatMessage)
+	g.POST("/api/team-chat/channels/{id}/read", app.MarkChatChannelRead)
+	g.POST("/api/team-chat/channels/{id}/typing", app.NotifyChatTyping)
+	g.PUT("/api/team-chat/messages/{id}", app.UpdateChatMessage)
+	g.DELETE("/api/team-chat/messages/{id}", app.DeleteChatMessage)
 
 	// CRM — etapas de ocorrência
 	g.GET("/api/occurrence-stages", app.ListOccurrenceStages)
