@@ -2,6 +2,9 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -515,4 +518,131 @@ func TestReassign_DoesNotTakeAnAttendanceFromSomeoneWhoIsNotTheAwayAgent(t *test
 	loadedMine := e.read(t, mine.ID)
 	assert.True(t, e.app.ReassignAwayTransferForTest(&loadedMine, e.away.ID, "reassigned_away_timeout"))
 	assert.NotEqual(t, e.away.ID, *e.read(t, mine.ID).AgentID)
+}
+
+// webhookSink is an HTTP endpoint that records what an integration would receive.
+type webhookSink struct {
+	mu       sync.Mutex
+	received []handlers.OutboundWebhookPayload
+	server   *httptest.Server
+}
+
+func newWebhookSink(t *testing.T) *webhookSink {
+	t.Helper()
+	s := &webhookSink{}
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var p handlers.OutboundWebhookPayload
+		if json.Unmarshal(body, &p) == nil {
+			s.mu.Lock()
+			s.received = append(s.received, p)
+			s.mu.Unlock()
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(s.server.Close)
+	return s
+}
+
+func (s *webhookSink) events() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, 0, len(s.received))
+	for _, p := range s.received {
+		out = append(out, p.Event)
+	}
+	return out
+}
+
+// transferData decodes the data of the n-th delivery.
+func (s *webhookSink) transferData(t *testing.T, n int) handlers.TransferEventData {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	require.Greater(t, len(s.received), n)
+	raw, err := json.Marshal(s.received[n].Data)
+	require.NoError(t, err)
+	var d handlers.TransferEventData
+	require.NoError(t, json.Unmarshal(raw, &d))
+	return d
+}
+
+// subscribe makes the organization's integration listen to transfer.assigned.
+func (e *reassignEnv) subscribe(t *testing.T) *webhookSink {
+	t.Helper()
+	sink := newWebhookSink(t)
+	createTestWebhook(t, e.app, e.org.ID, "integration", sink.server.URL,
+		[]string{string(models.WebhookEventTransferAssigned)})
+	e.app.InvalidateWebhooksCache(e.org.ID)
+	return sink
+}
+
+// Handing an attendance to a new agent tells integrations, exactly as a manual
+// assignment does; sending it back to the queue sends nothing (as before).
+func TestReassign_SendsTheTransferAssignedWebhook(t *testing.T) {
+	t.Run("by the sweep, to the colleague who received it", func(t *testing.T) {
+		e := newReassignEnv(t, models.AssignmentStrategyRoundRobin, 1)
+		colleague := e.others[0]
+		sink := e.subscribe(t)
+		tr := e.attendance(t, &e.away.ID, true)
+		e.goAwayFor(t, 11*time.Minute)
+
+		require.Equal(t, 1, e.sweep())
+		e.app.WaitForBackgroundTasks()
+
+		require.Equal(t, []string{"transfer.assigned"}, sink.events())
+		d := sink.transferData(t, 0)
+		assert.Equal(t, tr.ID.String(), d.TransferID)
+		assert.Equal(t, tr.ContactID.String(), d.ContactID)
+		require.NotNil(t, d.AgentID)
+		assert.Equal(t, colleague.ID.String(), *d.AgentID, "the event names the NEW agent")
+		require.NotNil(t, d.AgentName)
+		assert.Equal(t, colleague.FullName, *d.AgentName)
+		assert.Equal(t, e.account.Name, d.WhatsAppAccount)
+	})
+
+	t.Run("when the customer writes to an agent who is away past the tolerance", func(t *testing.T) {
+		e := newReassignEnv(t, models.AssignmentStrategyRoundRobin, 1)
+		colleague := e.others[0]
+		sink := e.subscribe(t)
+		tr := e.attendance(t, &e.away.ID, false)
+		e.goAwayFor(t, 11*time.Minute)
+		e.message(t, tr.ContactID, models.DirectionIncoming, time.Now(), nil)
+
+		e.app.ReevaluateOnCustomerReply(e.org.ID, tr.ContactID)
+		e.app.WaitForBackgroundTasks()
+
+		require.Equal(t, []string{"transfer.assigned"}, sink.events())
+		d := sink.transferData(t, 0)
+		require.NotNil(t, d.AgentID)
+		assert.Equal(t, colleague.ID.String(), *d.AgentID)
+	})
+
+	t.Run("not when it only goes back to the queue", func(t *testing.T) {
+		e := newReassignEnv(t, models.AssignmentStrategyRoundRobin, 1)
+		e.online[e.others[0].ID] = false // nobody eligible
+		sink := e.subscribe(t)
+		tr := e.attendance(t, &e.away.ID, true)
+		e.goAwayFor(t, 11*time.Minute)
+
+		require.Equal(t, 1, e.sweep())
+		e.app.WaitForBackgroundTasks()
+
+		assert.Nil(t, e.read(t, tr.ID).AgentID, "it did go back to the queue")
+		assert.Empty(t, sink.events(), "no agent was assigned, so no transfer.assigned")
+	})
+
+	t.Run("not for an organization whose integration does not listen to it", func(t *testing.T) {
+		e := newReassignEnv(t, models.AssignmentStrategyRoundRobin, 1)
+		sink := newWebhookSink(t)
+		createTestWebhook(t, e.app, e.org.ID, "other-event", sink.server.URL, []string{"message.incoming"})
+		e.app.InvalidateWebhooksCache(e.org.ID)
+		e.attendance(t, &e.away.ID, true)
+		e.goAwayFor(t, 11*time.Minute)
+
+		require.Equal(t, 1, e.sweep())
+		e.app.WaitForBackgroundTasks()
+
+		assert.Empty(t, sink.events())
+	})
 }
