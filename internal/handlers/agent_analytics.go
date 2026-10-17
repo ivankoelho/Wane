@@ -36,8 +36,12 @@ type AgentPerformanceStats struct {
 	AwaitingCustomer int64 `json:"awaiting_customer"`
 	// SLAAtRisk: escalated, not breached and the customer is waiting right now.
 	// SLABreached: breached at some point (historical, "SLA violado").
-	SLAAtRisk          int64   `json:"sla_at_risk"`
-	SLABreached        int64   `json:"sla_breached"`
+	SLAAtRisk   int64 `json:"sla_at_risk"`
+	SLABreached int64 `json:"sla_breached"`
+	// Ownership moves in the period (see calculateStatsFor).
+	ReassignedAway     int64   `json:"reassigned_away"`
+	ReassignedIn       int64   `json:"reassigned_in"`
+	ReturnedToQueue    int64   `json:"returned_to_queue"`
 	MessagesSent       int64   `json:"messages_sent"`
 	TotalBreakTimeMins float64 `json:"total_break_time_mins"`
 	BreakCount         int64   `json:"break_count"`

@@ -111,6 +111,7 @@ func GetMigrationModels() []MigrationModel {
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},
 		{"AgentPresenceLog", &models.AgentPresenceLog{}},
+		{"AgentTransferAssignment", &models.AgentTransferAssignment{}},
 
 		// Canned responses
 		{"CannedResponse", &models.CannedResponse{}},
@@ -369,6 +370,10 @@ func coreIndexes() []string {
 		// Presence: exactly one open interval per agent and organization, and fast history reads.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_presence_log_open ON agent_presence_log(organization_id, user_id) WHERE ended_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_presence_log_user_time ON agent_presence_log(organization_id, user_id, started_at DESC)`,
+		// Ownership history: one attendance's timeline, and what each agent lost or received.
+		`CREATE INDEX IF NOT EXISTS idx_transfer_assignments_transfer ON agent_transfer_assignments(organization_id, transfer_id, occurred_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_transfer_assignments_from ON agent_transfer_assignments(organization_id, from_agent_id, occurred_at) WHERE from_agent_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_transfer_assignments_to ON agent_transfer_assignments(organization_id, to_agent_id, occurred_at) WHERE to_agent_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_providers_org_provider ON sso_providers(organization_id, provider)`,
 		// Teams indexes
 		`CREATE INDEX IF NOT EXISTS idx_teams_org_active ON teams(organization_id, is_active)`,

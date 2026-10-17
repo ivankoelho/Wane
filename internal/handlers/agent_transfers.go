@@ -692,6 +692,8 @@ func (a *App) closeAttendance(
 	if opts.webhookEvent != "" {
 		a.dispatchTransferLifecycleWebhook(transfer, contact, opts.webhookEvent)
 	}
+	// The attendance ends here: close the last ownership interval.
+	a.recordOwnership(transfer.OrganizationID, actorID, transfer.ID, ownershipReasonClosed, transfer.AgentID, nil)
 	return nil
 }
 

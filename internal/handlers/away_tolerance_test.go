@@ -94,6 +94,12 @@ func (e awayEnv) owner(t *testing.T) *uuid.UUID {
 	return tr.AgentID
 }
 
+// customerWrites makes the customer the one waiting: their message is the latest.
+func (e awayEnv) customerWrites(t *testing.T) {
+	t.Helper()
+	createTestMessage(t, e.app, e.org.ID, e.contact.ID, models.DirectionIncoming, time.Now())
+}
+
 func (e awayEnv) pinCarteira(t *testing.T) {
 	t.Helper()
 	require.NoError(t, e.app.DB.Model(&models.Contact{}).Where("id = ?", e.contact.ID).
@@ -137,6 +143,7 @@ func TestAwayTolerance_OnKeepsAttendancesWhileAway(t *testing.T) {
 func TestAwayTolerance_SweepReleasesOnlyAfterTheDeadline(t *testing.T) {
 	e := newAwayEnv(t, 10)
 	e.goAway(t)
+	e.customerWrites(t)
 
 	e.backdateAway(t, 9*time.Minute)
 	assert.Equal(t, 0, e.reaper.SweepAwayOrganization(e.org.ID, time.Now()), "9 of 10 minutes: not yet")
@@ -164,6 +171,7 @@ func TestAwayTolerance_TimeoutKeepsTheCarteira(t *testing.T) {
 	e := newAwayEnv(t, 10)
 	e.pinCarteira(t)
 	e.goAway(t)
+	e.customerWrites(t)
 	e.backdateAway(t, 15*time.Minute)
 
 	require.Equal(t, 1, e.reaper.SweepAwayOrganization(e.org.ID, time.Now()))
@@ -199,6 +207,7 @@ func TestAwayTolerance_OnlyOptedInOrganizationsAndTheAwayAgent(t *testing.T) {
 	otherTransfer := createTestTransfer(t, on.app, on.org.ID, otherContact.ID, account.Name, models.TransferStatusActive, &other.ID)
 
 	on.goAway(t)
+	on.customerWrites(t)
 	on.backdateAway(t, time.Hour)
 	// The agent of the organization that did not opt in is away for a long time too
 	// (the original behaviour already returned their attendance when they left).
@@ -229,6 +238,7 @@ func TestAwayTolerance_CountsFromWhenTheAgentMarkedAway(t *testing.T) {
 	// that was assigned afterwards, then turn the feature on.
 	require.NoError(t, e.app.DB.Model(&models.AgentTransfer{}).Where("id = ?", e.transfer.ID).
 		Update("agent_id", e.agent.ID).Error)
+	e.customerWrites(t)
 	e.backdateAway(t, 30*time.Minute)
 	setAwayTolerance(t, e.app, e.org.ID, true, 10)
 

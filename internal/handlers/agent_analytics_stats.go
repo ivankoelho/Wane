@@ -30,9 +30,13 @@ import (
 //   - MessagesSent: outgoing messages sent by the agent (sent_by_user_id) in the
 //     period, regardless of whether the contact was ever transferred.
 //   - ActiveTransfers and its split: attendances the agent owns right now. The
-//     split looks at the last message since the attendance started: incoming =
-//     the customer waits for the agent, outgoing by a person = the agent waits
-//     for the customer. An attendance with no message yet is in neither.
+//     split uses the one definition in customer_waiting.go: the customer waits for
+//     the agent when their last message is newer than the last reply by a person
+//     (or there is none); the agent waits for the customer when the agent replied
+//     last. An attendance with no messages at all is in neither.
+//   - ReassignedAway / ReassignedIn / ReturnedToQueue: ownership moves in the period
+//     (agent to another agent, from another agent to this one, agent to the queue),
+//     from the ownership history. Closing an attendance is not a move.
 func (a *App) calculateStatsFor(orgID uuid.UUID, agentIDs []uuid.UUID, start, end time.Time) map[uuid.UUID]*AgentPerformanceStats {
 	out := make(map[uuid.UUID]*AgentPerformanceStats, len(agentIDs))
 	if len(agentIDs) == 0 {
@@ -110,25 +114,16 @@ func (a *App) calculateStatsFor(orgID uuid.UUID, agentIDs []uuid.UUID, start, en
 		SLAAtRisk        int64 `gorm:"column:sla_at_risk"`
 		SLABreached      int64 `gorm:"column:sla_breached"`
 	}
-	if err := a.DB.Raw(`
-SELECT t.agent_id,
+	activeQuery := `SELECT t.agent_id,
        COUNT(*) AS active,
-       COUNT(*) FILTER (WHERE lm.direction = ?) AS awaiting_agent,
-       COUNT(*) FILTER (WHERE lm.direction = ? AND lm.sent_by_user_id IS NOT NULL) AS awaiting_customer,
-       COUNT(*) FILTER (WHERE NOT t.sla_breached AND t.escalation_level >= 1 AND lm.direction = ?) AS sla_at_risk,
+       COUNT(*) FILTER (WHERE ` + customerWaitingCond + `) AS awaiting_agent,
+       COUNT(*) FILTER (WHERE ` + agentWaitingCond + `) AS awaiting_customer,
+       COUNT(*) FILTER (WHERE NOT t.sla_breached AND t.escalation_level >= 1 AND ` + customerWaitingCond + `) AS sla_at_risk,
        COUNT(*) FILTER (WHERE t.sla_breached) AS sla_breached
-FROM agent_transfers t
-LEFT JOIN LATERAL (
-    SELECT m.direction, m.sent_by_user_id
-    FROM messages m
-    WHERE m.organization_id = t.organization_id AND m.contact_id = t.contact_id
-      AND m.created_at >= t.transferred_at AND m.deleted_at IS NULL
-    ORDER BY m.created_at DESC
-    LIMIT 1
-) lm ON true
+FROM agent_transfers t ` + waitingLateralSQL + `
 WHERE t.organization_id = ? AND t.status = ? AND t.agent_id IN ? AND t.deleted_at IS NULL
-GROUP BY t.agent_id`,
-		models.DirectionIncoming, models.DirectionOutgoing, models.DirectionIncoming, orgID, models.TransferStatusActive, agentIDs).
+GROUP BY t.agent_id`
+	if err := a.DB.Raw(activeQuery, orgID, models.TransferStatusActive, agentIDs).
 		Scan(&active).Error; err != nil {
 		a.Log.Error("Failed to compute active transfers", "error", err, "org_id", orgID)
 	}
@@ -158,6 +153,41 @@ GROUP BY t.agent_id`,
 	for _, m := range sent {
 		if s, ok := out[m.AgentID]; ok {
 			s.MessagesSent = m.Count
+		}
+	}
+
+	// 5b. Ownership moves in the period, from the append-only ownership history.
+	var moves []struct {
+		AgentID  uuid.UUID
+		Away     int64
+		Queue    int64
+		Received int64
+	}
+	if err := a.DB.Raw(`
+SELECT agent_id, SUM(away) AS away, SUM(queue) AS queue, SUM(received) AS received FROM (
+    SELECT from_agent_id AS agent_id,
+           COUNT(*) FILTER (WHERE to_agent_id IS NOT NULL) AS away,
+           COUNT(*) FILTER (WHERE to_agent_id IS NULL AND reason <> ?) AS queue,
+           0::bigint AS received
+    FROM agent_transfer_assignments
+    WHERE organization_id = ? AND from_agent_id IN ? AND occurred_at >= ? AND occurred_at <= ?
+    GROUP BY from_agent_id
+    UNION ALL
+    SELECT to_agent_id AS agent_id, 0::bigint, 0::bigint,
+           COUNT(*) FILTER (WHERE from_agent_id IS NOT NULL)
+    FROM agent_transfer_assignments
+    WHERE organization_id = ? AND to_agent_id IN ? AND occurred_at >= ? AND occurred_at <= ?
+    GROUP BY to_agent_id
+) x GROUP BY agent_id`,
+		ownershipReasonClosed, orgID, agentIDs, start, end, orgID, agentIDs, start, end).
+		Scan(&moves).Error; err != nil {
+		a.Log.Error("Failed to compute ownership moves", "error", err, "org_id", orgID)
+	}
+	for _, m := range moves {
+		if s, ok := out[m.AgentID]; ok {
+			s.ReassignedAway = m.Away
+			s.ReturnedToQueue = m.Queue
+			s.ReassignedIn = m.Received
 		}
 	}
 

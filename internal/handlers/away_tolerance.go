@@ -46,9 +46,9 @@ func awayToleranceDuration(mins int) time.Duration {
 // everywhere else, so running it repeatedly, or beside the offline reaper or a
 // supervisor reassigning by hand, cannot release a transfer twice.
 //
-// For now the release is the return to the queue. It deliberately keeps the
-// agent as the contact's relationship manager (carteira): the conversation is
-// being redistributed, not taken away from them for good.
+// Only attendances in which the customer is waiting are redistributed, through the
+// team's own strategy (reassignAwayTransfer). The contact's carteira is kept: the
+// conversation is being redistributed, not taken from the agent for good.
 func (r *PresenceReaper) SweepAway(now time.Time) int {
 	var orgs []struct {
 		OrganizationID        uuid.UUID
@@ -97,7 +97,19 @@ func (r *PresenceReaper) sweepAwayOrganization(orgID uuid.UUID, mins int, now ti
 	}
 	released := 0
 	for _, agentID := range agents {
-		released += r.app.returnAgentTransfers(agentID, orgID, distEventReturnedAwayTimeout)
+		// Only the attendances in which the customer is waiting are redistributed. If
+		// the agent is the one waiting for the customer there is nothing urgent: it
+		// stays with them, and if the customer writes later it is handed over then
+		// (ReevaluateOnCustomerReply).
+		for _, id := range r.app.customerWaitingTransferIDs(orgID, agentID) {
+			var t models.AgentTransfer
+			if err := r.app.DB.Preload("Contact").First(&t, "id = ?", id).Error; err != nil {
+				continue
+			}
+			if r.app.reassignAwayTransfer(&t, agentID, distEventReassignedAwayTimeout) {
+				released++
+			}
+		}
 	}
 	return released
 }

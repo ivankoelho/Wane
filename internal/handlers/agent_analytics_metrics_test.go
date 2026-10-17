@@ -178,14 +178,16 @@ func TestAgentAnalytics_ActiveAttendancesAreSplitByWhoIsWaiting(t *testing.T) {
 	// Only a bot message since the attendance started: waiting for nobody yet.
 	_, c3 := e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
 	e.message(t, c3.ID, models.DirectionOutgoing, now.Add(-5*time.Minute), nil)
-	// A message from BEFORE the attendance does not count.
+	// The customer wrote BEFORE the attendance existed (that is the message that asked
+	// for a human) and nobody has replied: they are waiting, so a message sent before
+	// the transfer must count.
 	_, c4 := e.transfer(t, &agent.ID, models.TransferStatusActive, now.Add(-time.Hour), nil)
 	e.message(t, c4.ID, models.DirectionIncoming, now.Add(-3*time.Hour), nil)
 
 	s := e.statsOf(t, agent.ID)
 	assert.EqualValues(t, 4, s.ActiveTransfers)
-	assert.EqualValues(t, 1, s.AwaitingAgent)
-	assert.EqualValues(t, 1, s.AwaitingCustomer)
+	assert.EqualValues(t, 2, s.AwaitingAgent, "c1 (customer wrote last) and c4 (asked for a human, never answered)")
+	assert.EqualValues(t, 1, s.AwaitingCustomer, "c2: the agent replied last; c3 has only a bot message, so nobody waits")
 }
 
 // SLA at risk means: escalated, not breached AND the customer is waiting now.
