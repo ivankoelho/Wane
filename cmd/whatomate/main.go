@@ -235,6 +235,12 @@ func runServer(args []string) {
 			lo.Fatal("Team chat permissions backfill failed", "error", err)
 		}
 
+		// Same window: team_chat:join_any is a new action of an existing resource, so
+		// it needs its own guard; only the system admin role gets it.
+		if err := database.BackfillTeamChatJoinAnyPermission(db, lo); err != nil {
+			lo.Fatal("Team chat join_any permission backfill failed", "error", err)
+		}
+
 		// Data fix, not a schema migration: AutoMigrate adding occurrences.source
 		// with a DB default backfilled every existing row to 'whatsapp',
 		// including cases opened manually. Runs once, guarded by the column's

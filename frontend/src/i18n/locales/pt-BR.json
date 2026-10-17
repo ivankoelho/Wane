@@ -4398,6 +4398,10 @@
         "label": "Excluir mensagens de outros",
         "description": "Remover mensagens internas escritas por outras pessoas."
       },
+      "team_chat_join_any": {
+        "label": "Entrar em canais privados",
+        "description": "Entrar em um canal interno privado sem ser membro. Exige um motivo e fica registrado para os membros e na auditoria."
+      },
       "conversations_view_all": {
         "label": "Ver todas as conversas",
         "description": "Ver e atuar em conversas de qualquer atendente."

@@ -4409,6 +4409,10 @@
         "label": "Delete others' internal messages",
         "description": "Remove internal messages written by other people."
       },
+      "team_chat_join_any": {
+        "label": "Enter private channels",
+        "description": "Join a private internal channel without being a member. Requires a reason and is recorded for the members and the audit log."
+      },
       "conversations_view_all": {
         "label": "View all conversations",
         "description": "See and act on conversations of any agent."
